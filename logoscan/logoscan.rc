@@ -1,0 +1,37 @@
+//////////////////////////////////////////////////////////////////////
+// 	解析結果ダイアログリソース			resultdlg.rc
+//	Resource Script
+//////////////////////////////////////////////////////////////////////
+
+//#include <winres.h>
+#include "resource.h"
+
+//////////////////////////////////////////////////////////////////////
+// Dialog
+//
+
+RESULT_DLG DIALOG  0,0, 158,121
+STYLE WS_VISIBLE | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_SYSMENU
+CAPTION "解析結果"
+FONT 9, "ＭＳ Ｐゴシック"
+{
+	LTEXT     "ロゴ名", IDC_TEXT, 8,10,20,9
+	EDITTEXT  IDC_EDIT, 34, 8,115,12
+
+	DEFPUSHBUTTON  "送信",   IDC_SEND,  115,30,35,14, BS_CENTER|BS_VCENTER
+	PUSHBUTTON     "保存",   IDC_SAVE,  115,50,35,14, BS_CENTER|BS_VCENTER
+	PUSHBUTTON     "閉じる", IDC_CLOSE, 115,70,35,14, BS_CENTER|BS_VCENTER
+
+	GROUPBOX    "背景色", IDC_GROUP, 8,90,142,25,WS_VISIBLE
+
+	PUSHBUTTON    "黒" , IDC_BLACK,  15,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+	PUSHBUTTON    "白" , IDC_WHITE,  40,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+	PUSHBUTTON    "赤" , IDC_RED,    65,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+	PUSHBUTTON    "緑" , IDC_GREEN,  90,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+	PUSHBUTTON    "青" , IDC_BLUE,  115,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+
+
+	GROUPBOX    "",       IDC_PANEL, 8,25,100,60,WS_VISIBLE
+
+}
+
