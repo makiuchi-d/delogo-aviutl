@@ -27,21 +27,21 @@
 * 	31BYTEの文字列
 * 	データ数 1BYTE
 */
-#define LOGO_FILE_HEADER "<logo data file ver0 test3>\n\0\0\0\0\0"
+#define LOGO_FILE_HEADER "<logo data file ver0.1>\0\0\0\0\0\0\0\0\0\0\0"
 #define LOGO_FILE_HEADER_STR_SIZE  31
 
 
-/* ロゴデータ最大サイズ：4500pixelくらい
-*	AviUtlの拡張データ領域は最大 57102 BYTE
-*	これを超えるとプロファイル変更時などで落ちる
+/* ロゴデータ最大サイズ：
+* 		ロゴデータをプロファイルに保存しないようにしたため、
+* 		サイズ制限は実質なくなった
 */
-#define LOGO_MAXPIXEL (4700)
-#define LOGO_MAXSIZE  (57102)
+#define LOGO_MAXPIXEL (21840)
+#define LOGO_MAXSIZE  (0x40000)
 
 /* 不透明度最大値 */
 #define LOGO_MAX_DP   1000
 
-/* ロゴ名最大文字数 */
+/* ロゴ名最大文字数（終端\0含む） */
 #define LOGO_MAX_NAME 32
 
 /*--------------------------------------------------------------------

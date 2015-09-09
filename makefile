@@ -7,8 +7,8 @@ LN  = bcc32
 RL  = brc32
 RC  = brcc32
 
-CFLAG = -c
-LFLAG = -tWD -e$(EXE)
+CFLAG = -c -O1 -O2 -Oc -Oi -Ov
+LFLAG = -tWD -e$(EXE) -O1 -O2
 RFLAG = 
 
 EXE = delogo.auf

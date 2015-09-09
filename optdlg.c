@@ -9,7 +9,8 @@
 #include "resource.h"
 
 
-#define LGD_FILTER  "ロゴデータ (*.lgd)\0*.lgd\0全てのファイル (*.*)\0*.*\0"
+#define LGD_FILTER  "ロゴデータファイル (*.lgd)\0*.lgd\0"\
+                    "全てのファイル (*.*)\0*.*\0"
 #define LGD_DEFAULT "*.lgd"
 
 
