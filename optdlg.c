@@ -7,6 +7,7 @@
 #include "logo.h"
 #include "optdlg.h"
 #include "resource.h"
+#include "editdlg.h"
 
 
 #define LGD_FILTER  "ロゴデータファイル (*.lgd)\0*.lgd\0"\
@@ -25,9 +26,11 @@ static void on_IDC_DEL(HWND hdlg);
 static void on_IDC_EXPORT(HWND hdlg);
 static void on_IDC_UP(HWND hdlg);
 static void on_IDC_DOWN(HWND hdlg);
+static void on_IDC_EDIT(HWND hdlg);
 
 static void AddItem(HWND hdlg,void *data);
-static void DeleteItem(HWND list,int num);
+void InsertItem(HWND hdlg,int n,void *data);
+void DeleteItem(HWND list,int num);
 static int  ReadLogoData(char *fname,HWND hdlg);
 static void ExportLogoData(char *,void *,HWND);
 static void CopyLBtoCB(HWND list,HWND combo);
@@ -68,31 +71,40 @@ BOOL CALLBACK OptDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 			Wm_initdialog(hdlg);
 			break;
 
+		case WM_PAINT:
+			DispLogo(hdlg);	// 表示
+			break;
+
 		case WM_COMMAND:
 			switch(LOWORD(wParam)){
+				//------------------------------------------ボタン動作
 				case IDOK:
 					return on_IDOK(hdlg,wParam);
 
 				case IDCANCEL:
 					return on_IDCANCEL(hdlg,wParam);
 
-				case IDC_ADD:
+				case IDC_ADD:	// 追加
 					on_IDC_ADD(hdlg);
 					break;
 
-				case IDC_DEL:
+				case IDC_DEL:	// 削除
 					on_IDC_DEL(hdlg);
 					break;
 
-				case IDC_EXPORT:
+				case IDC_EXPORT:	// 書き出し
 					on_IDC_EXPORT(hdlg);
 					break;
 
-				case IDC_UP:
+				case IDC_EDIT:		// 編集
+					on_IDC_EDIT(hdlg);
+					break;
+
+				case IDC_UP:	// ↑
 					on_IDC_UP(hdlg);
 					break;
 
-				case IDC_DOWN:
+				case IDC_DOWN:	// ↓
 					on_IDC_DOWN(hdlg);
 					break;
 
@@ -122,12 +134,15 @@ BOOL CALLBACK OptDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 					DispLogo(hdlg);
 					return TRUE;
 
-				//--------------------------------------プレビュー処理
+				//-------------------------------------- リストボックス
 				case IDC_LIST:
 					switch(HIWORD(wParam)){
 						case LBN_SELCHANGE:
 							DispLogo(hdlg);
 							break;
+
+						case LBN_DBLCLK:	// ダブルクリック
+							on_IDC_EDIT(hdlg);	// 編集
 					}
 					break;
 			}
@@ -154,6 +169,9 @@ static void Wm_initdialog(HWND hdlg)
 	// 背景色に黒を選択
 	SendDlgItemMessage(hdlg,IDC_BLACK,BM_SETCHECK,(WPARAM)BST_CHECKED,0);
 	bgyc = yc_black;
+
+	// 一番上のリストアイテムを選択
+	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,0,0);
 }
 
 
@@ -243,6 +261,7 @@ static void on_IDC_DEL(HWND hdlg)
 	if(c!=0){
 		if(c==n) n--;
 		SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,n,0);
+		DispLogo(hdlg);
 	}
 }
 /*--------------------------------------------------------------------
@@ -279,6 +298,22 @@ static void on_IDC_EXPORT(HWND hdlg)
 
 	ExportLogoData(fname,data,hdlg);
 }
+/*--------------------------------------------------------------------
+* 	on_IDC_EDIT()		編集ボタン動作
+*-------------------------------------------------------------------*/
+static void on_IDC_EDIT(HWND hdlg)
+{
+	int n;
+
+	// 選択番号取得
+	n = SendDlgItemMessage(hdlg,IDC_LIST,LB_GETCURSEL,0,0);
+
+	if(n!= LB_ERR)
+		DialogBoxParam(optfp->dll_hinst,"EDIT_DLG",hdlg,EditDlgProc,(LPARAM)n);
+	else
+		MessageBox(hdlg,"ロゴが選択されていません",filter_name,MB_OK|MB_ICONERROR);
+}
+
 /*--------------------------------------------------------------------
 * 	on_IDC_UP()		↑ボタン動作
 *-------------------------------------------------------------------*/
@@ -515,11 +550,28 @@ static void AddItem(HWND hdlg,void *data)
 	add_num++;
 }
 
+/*--------------------------------------------------------------------
+* 	InsertItem()	リストアイテムを挿入
+*-------------------------------------------------------------------*/
+void InsertItem(HWND hdlg,int n,void *data)
+{
+	SendDlgItemMessage(hdlg,IDC_LIST,LB_INSERTSTRING,n,(LPARAM)(char *)data);
+	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETITEMDATA,n,(LPARAM)data);
+
+	if(add_buf==add_num){	// バッファがいっぱいのとき
+		add_buf += 4;
+		add_list = realloc(add_list,add_buf*sizeof(void*));
+	}
+
+	add_list[add_num] = data;
+	add_num++;
+}
+
 
 /*--------------------------------------------------------------------
 * 	DeleteItem()	リストアイテムを削除する
 *-------------------------------------------------------------------*/
-static void DeleteItem(HWND hdlg,int num)
+void DeleteItem(HWND hdlg,int num)
 {
 	if(del_buf==del_num){	// バッファがいっぱいのとき
 		del_buf += 4;
@@ -602,7 +654,8 @@ static void DispLogo(HWND hdlg)
 
 	// 選択ロゴデータ取得
 	i = SendDlgItemMessage(hdlg,IDC_LIST,LB_GETCURSEL,0,0);
-	if(i==LB_ERR)	return;	// 選択されていない時何もしない
+	if(i==LB_ERR)		return;	// 選択されていない時何もしない
+
 	lgh = (LOGO_HEADER *)SendDlgItemMessage(hdlg,IDC_LIST,LB_GETITEMDATA,i,0);
 
 	// BITMAPINFO設定

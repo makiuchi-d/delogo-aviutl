@@ -22,6 +22,7 @@ FONT 9, "ＭＳ Ｐゴシック"
 	PUSHBUTTON  "追加",     IDC_ADD,    100,10,50,14,BS_CENTER|BS_VCENTER
 	PUSHBUTTON  "削除",     IDC_DEL,    100,30,50,14,BS_CENTER|BS_VCENTER
 	PUSHBUTTON  "書き出し", IDC_EXPORT, 100,50,50,14,BS_CENTER|BS_VCENTER
+	PUSHBUTTON  "編集",     IDC_EDIT,   100,70,50,14,BS_CENTER|BS_VCENTER
 
 	PUSHBUTTON  "↑",       IDC_UP,     100,94,25,14,BS_CENTER|BS_VCENTER
 	PUSHBUTTON  "↓",       IDC_DOWN,   125,94,25,14,BS_CENTER|BS_VCENTER
@@ -36,15 +37,28 @@ FONT 9, "ＭＳ Ｐゴシック"
 	PUSHBUTTON    "赤" , IDC_RED,    68,170,20,13, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
 	PUSHBUTTON    "緑" , IDC_GREEN,  93,170,20,13, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
 	PUSHBUTTON    "青" , IDC_BLUE,  118,170,20,13, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+}
 
+//////////////////////////////////////////////////////////////////////
+// 編集ダイアログ
+//
+EDIT_DLG DIALOG 0,0, 150,50
+STYLE WS_VISIBLE | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_SYSMENU
+FONT 9, "ＭＳ Ｐゴシック"
+{
+	LTEXT    "ロゴ名", IDC_STATIC,   5,8,25,14
+	EDITTEXT ID_EDIT_NAME, 30,5,110,14, ES_LEFT|ES_AUTOHSCROLL
+
+	DEFPUSHBUTTON "OK",     IDOK,     20,30,50,14, BS_CENTER|BS_VCENTER
+	PUSHBUTTON    "CANCEL", IDCANCEL, 80,30,50,14, BS_CENTER|BS_VCENTER
 }
 
 //////////////////////////////////////////////////////////////////////
 //  VERSION INFO
 //
 VS_VIRSION_INFO VERSIONINFO
- FILEVERSION    0,0,3,0
- PRODUCTVERSION 0,0,3
+ FILEVERSION    0,0,4,0
+ PRODUCTVERSION 0,0,4
  FILEFLAGSMASK  0x3FL
  FILEFLAGS      0x0L
  FILEOS         VOS__WINDOWS32
@@ -55,14 +69,13 @@ VS_VIRSION_INFO VERSIONINFO
 	{
         BLOCK "041103A4"
 		{
-//			VALUE "Comments",         "\0"
             VALUE "FileDescription",  "透過性ロゴ フィルタ Plugin for AviUtl 0.98\0"
-            VALUE "FileVersion",      "0.0.3.0\0"
+            VALUE "FileVersion",      "0.0.4.0\0"
             VALUE "InternalName",     "deLogo\0"
             VALUE "LegalCopyright",   "(C) MakKi\0"
             VALUE "OriginalFilename", "delogo.aup\0"
             VALUE "ProductName",      "透過性ロゴ フィルタ\0"
-            VALUE "ProductVersion",   "0.0.3\0"
+            VALUE "ProductVersion",   "0.0.4\0"
 		}
 	}
     BLOCK "VarFileInfo"

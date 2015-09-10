@@ -141,7 +141,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.03 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.04 by MakKi";
 #define track_N 6
 #if track_N
 TCHAR *track_name[]   = { "位置 X", "位置 Y", "深度", "Y", "Cb", "Cr" };	// トラックバーの名前
@@ -838,50 +838,6 @@ static void change_param(void)
 }
 
 /*--------------------------------------------------------------------
-*	set_cb_logo()
-*		外部ファイルからロゴを読み込み、セット
-*-------------------------------------------------------------------*
-static void set_cb_logo(FILTER *fp)
-{
-	ULONG   ptr;
-	HANDLE  hFile;
-
-	// INIからロゴデータファイル名を読み込む
-	fp->exfunc->ini_load_str(fp,LDP_KEY,logodata_file,NULL);
-
-	if(lstrlen(logodata_file)==0){	// ロゴデータファイル名がなかったとき
-		// 読み込みダイアログ
-		if(!fp->exfunc->dlg_get_load_name(logodata_file,LDP_FILTER,LDP_DEFAULT)){
-			// キャンセルされた
-			MessageBox(fp->hwnd,"ロゴデータファイルがありません",filter_name,MB_OK|MB_ICONWARNING);
-			return;
-		}
-	}
-	else{	// ロゴデータファイル名があるとき
-		// 存在を調べる
-		hFile = CreateFile(logodata_file, 0, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,NULL);
-
-		if(hFile==INVALID_HANDLE_VALUE){	// みつからなかったとき
-			MessageBox(fp->hwnd,"ロゴデータファイルが見つかりません",filter_name,MB_OK|MB_ICONWARNING);
-			if(!fp->exfunc->dlg_get_load_name(logodata_file,LDP_FILTER,LDP_DEFAULT)){
-				// キャンセルされた
-				MessageBox(fp->hwnd,"ロゴデータファイルがありません",filter_name,MB_OK|MB_ICONWARNING);
-				return;
-			}
-		}
-		else
-			CloseHandle(hFile);
-	}
-
-	// ロゴファイル読み込み
-	read_logo_pack(logodata_file,fp);
-
-	if(SendMessage(dialog.cb_logo,CB_GETCOUNT,0,0))
-		// 拡張データ初期値設定
-		fp->ex_data_def = (void *)SendMessage(dialog.cb_logo,CB_GETITEMDATA,0,0);
-}
-
-/*--------------------------------------------------------------------
 * 	set_combo_item()		コンボボックスにアイテムをセット
 * 			dataはmallocで確保したポインタ
 * 			個別にlogodata配列に書き込む必要がある
@@ -909,7 +865,7 @@ static void del_combo_item(int num)
 	unsigned int i;
 
 	ptr = (void *)SendMessage(dialog.cb_logo,CB_GETITEMDATA,num,0);
-	if(ptr){ free(ptr);	ptr = NULL; }
+	if(ptr) free(ptr);
 
 	// ロゴデータ配列再構成
 	logodata_n = SendMessage(dialog.cb_logo,CB_GETCOUNT,0,0);
