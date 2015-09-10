@@ -23,14 +23,14 @@ $(EXE): $(OBJ) $(RES)
 	$(LN) $(LFLAG) $(OBJ)
 	$(RL) -fe$(EXE) $(RES)
 
-filter.obj: filter.cpp ..\filter.h ..\logo.h scanpix.h xywh.h resultdlg.h
+filter.obj: filter.cpp ..\filter.h ..\logo.h scanpix.h resultdlg.h
 	$(CC) $(CFLAG) filter.cpp
 
 scanpix.obj: scanpix.cpp ..\filter.h ..\logo.h scanpix.h approxim.h
 	$(CC) $(CFLAG) scanpix.cpp
 
-resultdlg.obj: resultdlg.cpp resultdlg.h resource.h ..\filter.h ..\logo.h
-	$(CC) $(CFLAG) resultdlg.cpp
+resultdlg.obj: resultdlg.c resultdlg.h resource.h ..\filter.h ..\logo.h
+	$(CC) $(CFLAG) resultdlg.c
 
 $(RES): logoscan.rc
 	$(RC) $(RFLAG) logoscan.rc

@@ -11,7 +11,15 @@
 extern FILTER* dlgfp;	// FILTER構造体
 extern char    defname[32];	// デフォルトロゴ名
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // ダイアログプロシージャ
 extern BOOL CALLBACK ResultDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

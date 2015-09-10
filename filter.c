@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.02
+* 								ver 0.05
 * 
 * 2003
 * 	02/01:	製作開始
@@ -8,7 +8,7 @@
 * 	      	なぜ？バグ？どうしよう。
 * 	      	と思ったら、領域サイズに制限があるのね… SDKには一言も書いてないけど。
 * 	      	消えた－－!!（Ｂだけ）ちょっと感動。
-* 	      	BSロゴって輝度だけの変化なのかぁ。RGBでやると色変わるわけだ。
+* 	      	BSロゴって輝度だけの変化なのか？RGBでやると色変わるし。
 * 	02/06:	プロファイルの途中切り替えに仮対応。
 * 	02/08:	BS2ロゴ実装。（テスト用ver.1）
 * 	02/11:	YCbCrを微調整できるようにした。
@@ -26,7 +26,7 @@
 * 	04/07:	ロゴプレビューの背景色を変更できるようにした。
 * 	04/09:	解析プラグインからのデータを受信出来るようにした。
 * 			深度調整の方法を変更(ofset->gain)
-* 			プレビューで枠からはみ出さないようにした。
+* 			プレビューで枠からはみ出さないようにした。（はみ出しすぎると落ちる）
 * 	04/20:	フィルタ名変更。ロゴ付加モードを一時廃止。
 * 	04/28:	1/4単位位置調整実装。
 * 			ロゴ付加モード(あまり意味ないけど)復活
@@ -38,8 +38,11 @@
 * 	05/04:	不透明度調整の方法を変更。
 * 	05/08:	メモリ関連ルーチン大幅変更		(0.02)
 * 			VFAPI動作に対応、プロファイルの途中切り替えに対応
-* 			ロゴデータのサイズを約４倍にした。
+* 			ロゴデータのサイズ制限を約４倍にした。
 * 	05/10:	データが受信できなくなっていたバグを修正	(0.03)
+* 	05/17:	ロゴ名を編集できるようにした。(0.04)
+* 	06/12:	プレビューの背景色をRGBで指定できるように変更。
+* 			位置調整が４の倍数のときcreate_adj_exdata()を呼ばないようにした。（0.05）
 * 
 *********************************************************************/
 
@@ -55,11 +58,11 @@
 * 		→付けてみた
 * 	・解析プラグからデータを受け取るには…独自WndMsg登録してSendMessageで送ってもらう
 * 		→ちゃんと動いた。
-* 	・ロゴに１ピクセル未満のズレがある。1/4ピクセルでの位置調整が必要そう。
+* 	・ロゴに１ピクセル未満のズレがある。1/4ピクセルくらいでの位置調整が必要そう。
 * 		→実装完了
 * 	・ダイアログを表示したまま終了するとエラー吐く
 * 		→親ウィンドウをAviUtl本体にすることで終了できなくした
-* 	・ロゴデータ構造少し変えようかな… 色差要素のビットを半分にするとか。ver0.10で出すか？
+* 	・ロゴデータ構造少し変えようかな… 色差要素のビットを半分にするとか。ver0.10でやるか？
 * 
 *  新メモリ管理について:(2003/05/08)
 * 	fp->ex_data_ptrにはロゴの名称のみを保存。（7FFDバイトしかプロファイルに保存されず、不具合が生じるため）
@@ -68,7 +71,7 @@
 * 	func_proc()ではex_data（ロゴ名称）と一致するデータをlogodata配列から検索。なかった場合は何もしない。
 * 	位置パラメータを使って位置調整データを作成。その後で除去・付加関数を呼ぶ。
 * 	WndProcでは、WM_FILTER_INITでコンボボックスアイテムをlogodata配列から作る。
-* 	ITEMDATAには従来どおりロゴデータのポインタを保存する。
+* 	コンボアイテムのITEMDATAには従来どおりロゴデータのポインタを保存する。
 * 	WM_FILTER_INITではコンボボックスアイテムからファイルに保存。（今までどおり）
 * 	オプション設定ダイアログでのロゴデータの読み込み・削除は今までどおり。
 * 	OKボタンが押されたときは、リストアイテムからlogodata配列を作り直す。コンボアイテムの更新は今までどおり。
@@ -141,7 +144,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.04 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.05 by MakKi";
 #define track_N 6
 #if track_N
 TCHAR *track_name[]   = { "位置 X", "位置 Y", "深度", "Y", "Cb", "Cr" };	// トラックバーの名前
@@ -292,11 +295,21 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 	int num;
 	char adjdata[LOGO_MAXSIZE];
 
+	// ロゴ検索
 	num = find_logo(fp->ex_data_ptr);
 	if(num<0) return FALSE;
 
-	if(!create_adj_exdata(fp,(void *)adjdata,logodata[num]))
-		return FALSE;
+	if(fp->track[LOGO_X]%4 || fp->track[LOGO_Y]%4){
+		// 位置調整が４の倍数でないとき、1/4ピクセル単位調整
+		if(!create_adj_exdata(fp,(void *)adjdata,logodata[num]))
+			return FALSE;
+	}
+	else {
+		// 4の倍数のときはx,yのみ書き換え
+		memcpy(adjdata,logodata[num],LOGO_DATASIZE(logodata[num]));
+		((LOGO_HEADER *)adjdata)->x += fp->track[LOGO_X] / 4;
+		((LOGO_HEADER *)adjdata)->y += fp->track[LOGO_Y] / 4;
+	}
 
 	if(fp->check[1])	// 除去モードチェック
 		return func_proc_eraze_logo(fp,fpip,(void *)adjdata);	// ロゴ除去モード
@@ -629,7 +642,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	// ロゴ名コピー
 	memcpy(adjdata->name,data->name,LOGO_MAX_NAME);
 
-	// 左上座標設定（位置調整済み）
+	// 左上座標設定（位置調整後）
 	adjdata->x = data->x +(int)(fp->track[LOGO_X]+200)/4 -50;
 	adjdata->y = data->y +(int)(fp->track[LOGO_Y]+200)/4 -50;
 

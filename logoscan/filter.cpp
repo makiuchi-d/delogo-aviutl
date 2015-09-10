@@ -18,30 +18,37 @@
 * 	05/10:	ロゴ範囲の最大値を約４倍にした。(logo.h)
 * 			背景値計算を変更（ソートして真中らへんだけ平均）
 * 			解析が255フレームを超えると落ちるバグ修正		(β02)
+* 	06/16:	エラーメッセージを一部修正
+* 			ロゴ範囲の形に色が変になるバグ修正
+* 			wとhを間違えていたなんて…鬱だ
+* 			背景が単一色かどうかを内部で判定するようにした。
+* 	06/17:	昨日の修正で入れてしまったバグを修正
 * 
 *********************************************************************/
 /*	TODO:
+* 	・中断処理付けないとなー
 * 
 * 	MEMO:
-* 	・背景値計算改善：メディアン化してから平均とか
+* 	・背景値計算改善策①：メディアン化してから平均とか
 * 	・背景値計算改善策②：ソートして真中らへんだけで計算とか
+* 
+* 	・背景が単色かどうかの判定：背景値の平均と、最大or最小との差が閾値以上のとき単一でないとするのはどうか
+* 		→最大と最小の差が閾値以上のとき単一でないと判断のほうがよさそう。
+* 
 */
 #include <windows.h>
 #include <stdlib.h>
 #include "..\\filter.h"
 #include "..\\logo.h"
 #include "scanpix.h"
-#include "xywh.h"
 #include "resultdlg.h"
 
+//#include <stdio.h>
 
-#define Abs(x) ((x>0)? x : -x)
 
-
-// ダイアログアイテム
+// ボタン
 #define ID_SCANBTN  40010
 HWND scanbtn;
-
 
 short dn_x,dn_y;	// マウスダウン座標
 short up_x,up_y;	// アップ座標
@@ -49,6 +56,20 @@ bool  flg_mouse_down = 0;	// マウスダウンフラグ
 
 void *logodata = NULL;	// ロゴデータ（解析結果）
 
+class XYWH {
+public:
+	short x;
+	short y;
+	short w;
+	short h;
+
+	XYWH(void)
+		{ x=y=w=h=-1; }
+	XYWH(XYWH& r)
+		{ x=r.x; y=r.y; w=r.w; h=r.h; }
+	XYWH(int nx,int ny,int nw,int nh)
+		{ x=nx; y=ny; w=nw; h=nh; }
+};
 //----------------------------
 //	プロトタイプ宣言
 //----------------------------
@@ -56,24 +77,24 @@ inline void create_dlgitem(HWND hwnd,HINSTANCE hinst);
 inline void SetXYWH(FILTER* fp,void* editp);
 inline void SetRange(FILTER* fp,void* editp);
 void ScanLogoData(FILTER* fp,void* editp);
-void SetScanPixel(FILTER* fp,ScanPixel*& sp,int,int,int,void*);
-void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h);
+void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*);
+bool Cal_BGcolor(PIXEL_YC&,PIXEL_YC*,XYWH&,int,int);
 void CreateLogoData(FILTER* fp,ScanPixel*& sp);
-int comp_short(const void* x,const void* y);
+int  comp_short(const void* x,const void* y);
 static short med_average(short* s,int n);
 
 //----------------------------
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver.β02 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver.β03 by MakKi";
 
-#define track_N 4
+#define track_N 5
 #if track_N
-TCHAR *track_name[]   = { "位置X","位置Y","幅","高さ" };	// トラックバーの名前
-int   track_default[] = { 1, 1, 1, 1 };	// トラックバーの初期値
-int   track_s[]       = { 1, 1, 1, 1 };	// トラックバーの下限値
-int   track_e[]       = { 1, 1, 1, 1 };	// トラックバーの上限値
+TCHAR *track_name[]   = { "位置X","位置Y","幅","高さ","閾値" };	// トラックバーの名前
+int   track_default[] = { 1, 1, 1, 1,  30 };	// トラックバーの初期値
+int   track_s[]       = { 1, 1, 1, 1,   0 };	// トラックバーの下限値
+int   track_e[]       = { 1, 1, 1, 1, 255 };	// トラックバーの上限値
 #endif
 
 #define check_N 0
@@ -86,7 +107,7 @@ int   check_default[] = { 0 };	// デフォルト
 #define tLOGOY   1
 #define tLOGOW   2
 #define tLOGOH   3
-
+#define tTHY     4
 
 // 設定ウィンドウの高さ
 #define WND_Y (60+24*track_N+20*check_N)
@@ -349,8 +370,9 @@ void ScanLogoData(FILTER* fp,void* editp)
 {
 	EnableWindow(scanbtn,FALSE);	// 解析ボタン無効化
 
-	int frame_n,w,h;	// フレーム数,幅,高さ
-	int frame;	// 現在の表示フレーム
+	int w,h;		// 幅,高さ
+	int start,end;	// 選択開始・終了フレーム
+	int frame;		// 現在の表示フレーム
 
 	ScanPixel*  sp = NULL;
 	LOGO_HEADER lgh;
@@ -361,9 +383,9 @@ void ScanLogoData(FILTER* fp,void* editp)
 
 		// 必要な情報を集める
 		frame   = fp->exfunc->get_frame(editp);
-		frame_n = fp->exfunc->get_frame_n(editp);
-		if(!frame_n) throw "映像が読み込まれていません";
-		if(frame_n<2) throw "画像の枚数が足りません";
+		if(!frame) throw "映像が読み込まれていません";
+		fp->exfunc->get_select_frame(editp,&start,&end);
+		if(end-start<1) throw "画像の枚数が足りません";
 
 		if((fp->track[tLOGOW]+1)*(fp->track[tLOGOH]+1) > LOGO_MAXPIXEL)
 			// h*wがロゴデータ上限より大きい時
@@ -377,13 +399,13 @@ void ScanLogoData(FILTER* fp,void* editp)
 		fp->exfunc->set_ycp_filtering_cache_size(fp,w,h,1,NULL);
 
 		// ロゴ名の初期値
-		GetWindowText(GetWindow(fp->hwnd,GW_OWNER),defname,13);	// タイトルバー文字列取得
-		for(int i=1;i<13;i++)
-			if(defname[i]=='.') defname[i] = '\0';	// 最初の'.'を終端にする
+		GetWindowText(GetWindow(fp->hwnd,GW_OWNER),defname,LOGO_MAX_NAME-9);	// タイトルバー文字列取得
+		for(int i=1;i<LOGO_MAX_NAME-9;i++)
+			if(defname[i]=='.') defname[i] = '\0';	// 2文字目以降の'.'を終端にする
 		wsprintf(defname,"%s %dx%d",defname,w,h);	// デフォルトロゴ名作成
 
 		// ScanPixelを設定する
-		SetScanPixel(fp,sp,w,h,frame_n,editp);
+		SetScanPixel(fp,sp,w,h,start,end,editp);
 
 		// 解析・ロゴデータ作成
 		CreateLogoData(fp,sp);
@@ -395,6 +417,7 @@ void ScanLogoData(FILTER* fp,void* editp)
 		if(logodata) delete[] logodata;
 		logodata=NULL;
 		EnableWindow(scanbtn,TRUE);	// ボタンを有効に戻す
+
 		return;
 	}
 
@@ -423,7 +446,7 @@ void ScanLogoData(FILTER* fp,void* editp)
 /*--------------------------------------------------------------------
 *	ScanPixelを設定する
 *-------------------------------------------------------------------*/
-void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
+void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp)
 {
 	XYWH xywh(fp->track[tLOGOX],fp->track[tLOGOY],fp->track[tLOGOW],fp->track[tLOGOH]);
 
@@ -443,14 +466,16 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
 	char wndtitle[128];
 
 	for(int i=0;i<xywh.w*xywh.h;i++)
-		sp[i].Alloc(frame_n);
+		sp[i].Alloc(e-s+1);
 
 	// 各フレーム処理
-	for(int n=0;n<frame_n;n++){
+	for(int n=s;n<=e;n++){
+
+// ここで中断判定
 
 		// 表示フレームを更新
 		fp->exfunc->set_frame(editp,n);
-		wsprintf(wndtitle,"ロゴ解析中...  [%d/%d]",n+1,frame_n);
+		wsprintf(wndtitle,"ロゴ解析中...  [%d/%d]",n-s+1,e-s+1);
 		SetWindowText(GetWindow(fp->hwnd,GW_OWNER),wndtitle);
 
 		// 画像取得
@@ -458,8 +483,16 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
 
 		// 背景平均値計算
 		PIXEL_YC bg;
-		Cal_BGcolor(bg,pix,xywh,w,h);
 
+		if(Cal_BGcolor(bg,pix,xywh,w,fp->track[tTHY])==false)
+			// 単一背景でないときサンプルをセットしない
+			continue;
+/*
+FILE* file;
+file=fopen("logoscan.txt","a");
+fprintf(file,"%d\n",n+1);
+fclose(file);
+*/
 		// ロゴサンプルセット
 		for(int i=0;i<xywh.h;i++){
 			for(int j=0;j<xywh.w;j++){
@@ -475,7 +508,7 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
 /*--------------------------------------------------------------------
 *	背景色計算
 *-------------------------------------------------------------------*/
-void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h)
+bool Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int thy)
 {
 	short* y;	// 背景色配列
 	short* cb;
@@ -489,7 +522,7 @@ void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h)
 	cb = new short[(xywh.w+xywh.h+2)*2];
 	cr = new short[(xywh.w+xywh.h+2)*2];
 
-	pix += xywh.x-1 + (xywh.y-1)*h;	// X-1,Y-1に移動
+	pix += xywh.x-1 + (xywh.y-1)*w;	// X-1,Y-1に移動
 
 	// 横線（上）合計
 	for(i=0;i<=xywh.w+1;i++){
@@ -529,9 +562,19 @@ void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h)
 	r.cb = med_average(cb,n);
 	r.cr = med_average(cr,n);
 
+	bool ret = true;	// 返却値
+
+	// 最小と最大が閾値以上離れている場合、単一色でないと判断
+	if((abs(y[0] - y[n-1])>thy*8) ||
+	   (abs(cb[0]-cb[n-1])>thy*8) ||
+	   (abs(cr[0]-cr[n-1])>thy*8))
+			ret = false;
+
 	delete[] y;
 	delete[] cb;
 	delete[] cr;
+
+	return ret;
 }
 
 /*--------------------------------------------------------------------
@@ -564,7 +607,7 @@ void CreateLogoData(FILTER* fp,ScanPixel*& sp)
 *-------------------------------------------------------------------*/
 int comp_short(const void* x,const void* y)
 {
-	return ((int)*(const short*)x - *(const short*)y);
+	return (*(const short*)x - *(const short*)y);
 }
 
 /*--------------------------------------------------------------------

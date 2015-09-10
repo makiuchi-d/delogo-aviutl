@@ -32,5 +32,5 @@ optdlg.obj: optdlg.c optdlg.h filter.h logo.h resource.h
 editdlg.obj: editdlg.c editdlg.h resource.h
 	$(CC) $(CFLAG) editdlg.c
 
-$(RES): delogo.rc
+$(RES): delogo.rc resource.h
 	$(RC) $(RFLAG) delogo.rc

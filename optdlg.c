@@ -36,6 +36,7 @@ static void ExportLogoData(char *,void *,HWND);
 static void CopyLBtoCB(HWND list,HWND combo);
 static void CopyCBtoLB(HWND combo,HWND list);
 static void DispLogo(HWND hdlg);
+static void set_bgyc(HWND hdlg);
 
 
 //----------------------------
@@ -46,6 +47,7 @@ HWND    hcb_logo;	// コンボボックスのハンドル
 HWND    hoptdlg;
 PIXEL  *pix;		// 表示用ピクセル
 PIXEL_YC bgyc; // 背景色
+
 const PIXEL_YC yc_black = {    0,    0,    0 };	// 黒
 const PIXEL_YC yc_white = { 4080,    0,    0 };	// 白
 const PIXEL_YC yc_red   = { 1220, -688, 2040 };	// 赤
@@ -109,28 +111,13 @@ BOOL CALLBACK OptDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 					break;
 
 				//------------------------------------------背景色変更
-				case IDC_BLACK:
-					bgyc = yc_black;
-					DispLogo(hdlg);
-					return TRUE;
 
-				case IDC_WHITE:
-					bgyc = yc_white;
-					DispLogo(hdlg);
-					return TRUE;
 
 				case IDC_RED:
-					bgyc = yc_red;
-					DispLogo(hdlg);
-					return TRUE;
-
 				case IDC_GREEN:
-					bgyc = yc_green;
-					DispLogo(hdlg);
-					return TRUE;
-
 				case IDC_BLUE:
-					bgyc = yc_blue;
+					//bgyc = yc_red;
+					set_bgyc(hdlg);
 					DispLogo(hdlg);
 					return TRUE;
 
@@ -172,6 +159,14 @@ static void Wm_initdialog(HWND hdlg)
 
 	// 一番上のリストアイテムを選択
 	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,0,0);
+
+	// RGBエディット・スピンのレンジ設定
+	SendDlgItemMessage(hdlg,IDC_RED,   EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_GREEN, EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_BLUE,  EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_SPINR, UDM_SETRANGE, 0, 256);
+	SendDlgItemMessage(hdlg,IDC_SPING, UDM_SETRANGE, 0, 256);
+	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 256);
 }
 
 
@@ -733,6 +728,44 @@ static void DispLogo(HWND hdlg)
 					0,0,lgh->w,lgh->h,pix,&bmi,DIB_RGB_COLORS,SRCCOPY);
 
 	ReleaseDC(panel,hdc);
+}
+
+/*--------------------------------------------------------------------
+* 	DispLogo()	ロゴを表示
+*-------------------------------------------------------------------*/
+static void set_bgyc(HWND hdlg)
+{
+	BOOL  trans;
+	int   t;
+	PIXEL p;
+
+	// RGB値取得
+	t = GetDlgItemInt(hdlg,IDC_BLUE,&trans,FALSE);
+	if(trans==FALSE) p.b = 0;
+	else if(t > 255) p.b = 255;
+	else if(t < 0)   p.b = 0;
+	else  p.b = t;
+	if(t != p.b)
+		SetDlgItemInt(hdlg,IDC_BLUE ,p.b,FALSE);
+
+	t = GetDlgItemInt(hdlg,IDC_GREEN,&trans,FALSE);
+	if(trans==FALSE) p.g = 0;
+	else if(t > 255) p.g = 255;
+	else if(t < 0)   p.g = 0;
+	else  p.g = t;
+	if(t != p.g)
+		SetDlgItemInt(hdlg,IDC_GREEN,p.g,FALSE);
+
+	t = GetDlgItemInt(hdlg,IDC_RED,&trans,FALSE);
+	if(trans==FALSE) p.r = 0;
+	else if(t > 255) p.r = 255;
+	else if(t < 0)   p.r = 0;
+	else  p.r = t;
+	if(t != p.r)
+		SetDlgItemInt(hdlg,IDC_RED  ,p.r,FALSE);
+
+	// RGB -> YCbCr
+	optfp->exfunc->rgb2yc(&bgyc,&p,1);
 }
 
 //*/

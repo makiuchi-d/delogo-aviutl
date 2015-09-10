@@ -17,9 +17,11 @@
 * 		n: 配列の要素数
 * 		a: 傾きバッファへのポインタ
 * 		b: 切片バッファへのポインタ
+* 	返却値
+* 		成功：true	失敗：false
 *===================================================================*/
 template <class T>
-void approxim_line(T* x,T* y,int n,double& a,double& b)
+bool approxim_line(T* x,T* y,int n,double& a,double& b)
 {
 	double sum_x,sum_y,sum_x2,sum_xy;
 	double temp;
@@ -31,10 +33,12 @@ void approxim_line(T* x,T* y,int n,double& a,double& b)
 
 	// ０での商算回避
 	temp = (double)n*sum_x2 - sum_x*sum_x;
-	if(temp==0) throw "Can't get approxim line";
+	if(temp==0.0) return false;
 
 	a = ((double)n*sum_xy - sum_x*sum_y)/temp;
 	b = (sum_x2*sum_y - sum_x*sum_xy)/temp;
+
+	return true;
 }
 
 /*--------------------------------------------------------------------

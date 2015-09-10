@@ -2,10 +2,13 @@
 * 	class ScanPixel
 * 	各ピクセルのロゴ色・不透明度解析用クラス
 * 
-* 		operator new[](size_t,T* p) を使いすぎると落ちる。
-* 		ScanPixel::Allocを最初に使うことで回避できる。(2003/05/10)
+* 2003
+* 	05/10:	operator new[](size_t,T* p) を使いすぎると落ちる。
+* 			ScanPixel::Allocを最初に使うことで回避できる。
+* 	06/16:	やっぱりnewやめて素直にrealloc使うことにした。
+* 	06/17:	昨日の修正で入れてしまったバグを修正
+* 			エラーメッセージを追加（サンプルが無い状態で
 * 
-* 								(最終更新：2003/05/10)
 *********************************************************************/
 #include <windows.h>
 #include "..\\filter.h"
@@ -16,6 +19,8 @@
 
 // エラーメッセージ
 const char* CANNOT_MALLOC = "メモリを確保できませんでした";
+const char* CANNOT_GET_APPROXIMLINE = "サンプルが足りません\n背景色の異なるサンプルを加えてください";
+const char* NO_SAMPLE = "サンプルが足りません\nロゴの背景が単一色のサンプルを加えてください";
 
 #define DP_RANGE 0x3FFF
 
@@ -41,28 +46,6 @@ inline void RGBtoYCbCr(PIXEL_YC& ycp,PIXEL& rgb)
 }
 
 /*--------------------------------------------------------------------
-* 	Ｃライブラリのreallocの代わり
-* 		T* = new (T*) T[]
-*-------------------------------------------------------------------*/
-template <class T>
-inline void* operator new[](size_t x,T* p)
-{
-	T* temp;
-	if(x)
-		temp = new T[x/sizeof(T)];	// 新領域
-	else
-		temp = NULL;
-
-	if(p){
-		if(temp)
-			memcpy(temp,p,x);	// 旧領域からコピー
-		delete[] p;	// 旧領域開放
-	}
-
-	return temp;	// 新領域を返す
-}
-
-/*--------------------------------------------------------------------
 * 	Abs()	絶対値
 *-------------------------------------------------------------------*/
 template <class T>
@@ -76,12 +59,12 @@ inline T Abs(T x){
 ScanPixel::ScanPixel(void)
 {
 	bufsize = 32;
-	lst_y    = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
-	lst_cb   = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
-	lst_cr   = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
-	lst_bgy  = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
-	lst_bgcb = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
-	lst_bgcr = new short[bufsize];	//(short*)malloc(bufsize*sizeof(short));
+	lst_y    = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_cb   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_cr   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgy  = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgcb = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgcr = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 	n = 0;
 
 	// メモリ確保失敗
@@ -96,12 +79,12 @@ ScanPixel::ScanPixel(void)
 ScanPixel::~ScanPixel()
 {
 	bufsize = 0;
-	if(lst_y)    delete[] lst_y;	//free(lst_y);
-	if(lst_cb)   delete[] lst_cb;	//free(lst_cb);
-	if(lst_cr)   delete[] lst_cr;	//free(lst_cr);
-	if(lst_bgy)  delete[] lst_bgy;	//free(lst_bgy);
-	if(lst_bgcb) delete[] lst_bgcb;	//free(lst_bgcb);
-	if(lst_bgcr) delete[] lst_bgcr;	//free(lst_bgcr);
+	if(lst_y)    free(lst_y);	//delete[] lst_y;
+	if(lst_cb)   free(lst_cb);	//delete[] lst_cb;
+	if(lst_cr)   free(lst_cr);	//delete[] lst_cr;
+	if(lst_bgy)  free(lst_bgy);	//delete[] lst_bgy;
+	if(lst_bgcb) free(lst_bgcb);	//delete[] lst_bgcb;
+	if(lst_bgcr) free(lst_bgcr);	//delete[] lst_bgcr;
 }
 
 /*====================================================================
@@ -111,16 +94,15 @@ ScanPixel::~ScanPixel()
 *===================================================================*/
 int ScanPixel::Alloc(unsigned int f)
 {
-	ScanPixel::~ScanPixel();
-
 	bufsize = f;
+	if(f<=n) n = f-1;
 
-	lst_y    = new short[f];
-	lst_cb   = new short[f];
-	lst_cr   = new short[f];
-	lst_bgy  = new short[f];
-	lst_bgcb = new short[f];
-	lst_bgcr = new short[f];
+	lst_y    = (short*)realloc(lst_y,   f*sizeof(short));	//new short[f];
+	lst_cb   = (short*)realloc(lst_cb,  f*sizeof(short));	//new short[f];
+	lst_cr   = (short*)realloc(lst_cr,  f*sizeof(short));	//new short[f];
+	lst_bgy  = (short*)realloc(lst_bgy, f*sizeof(short));	//new short[f];
+	lst_bgcb = (short*)realloc(lst_bgcb,f*sizeof(short));	//new short[f];
+	lst_bgcr = (short*)realloc(lst_bgcr,f*sizeof(short));	//new short[f];
 
 		// メモリ確保失敗
 	if(lst_y==NULL || lst_cb==NULL || lst_cr==NULL ||
@@ -139,12 +121,12 @@ int ScanPixel::AddSample(PIXEL_YC& ycp,PIXEL_YC& ycp_bg)
 {
 	if(n>=bufsize){	// バッファが足りない時サイズ変更
 		bufsize += 32;
-		lst_y    = new (lst_y)   short[bufsize];
-		lst_cb   = new (lst_cb)  short[bufsize];
-		lst_cr   = new (lst_cr)  short[bufsize];
-		lst_bgy  = new (lst_bgy) short[bufsize];
-		lst_bgcb = new (lst_bgcb)short[bufsize];
-		lst_bgcr = new (lst_bgcr)short[bufsize];
+		lst_y    = (short*)realloc(lst_y,   bufsize*sizeof(short));	//new (lst_y)   short[bufsize];
+		lst_cb   = (short*)realloc(lst_cb,  bufsize*sizeof(short));	//new (lst_cb)  short[bufsize];
+		lst_cr   = (short*)realloc(lst_cr,  bufsize*sizeof(short));	//new (lst_cr)  short[bufsize];
+		lst_bgy  = (short*)realloc(lst_bgy, bufsize*sizeof(short));	//new (lst_bgy) short[bufsize];
+		lst_bgcb = (short*)realloc(lst_bgcb,bufsize*sizeof(short));	//new (lst_bgcb)short[bufsize];
+		lst_bgcr = (short*)realloc(lst_bgcr,bufsize*sizeof(short));	//new (lst_bgcr)short[bufsize];
 
 		// メモリ確保失敗
 		if(lst_y==NULL || lst_cb==NULL || lst_cr==NULL ||
@@ -244,12 +226,12 @@ int ScanPixel::ClearSample(void)
 	ScanPixel::~ScanPixel();
 
 	bufsize = 32;
-	lst_y    = new (lst_y)    short[bufsize];
-	lst_cb   = new (lst_cb)   short[bufsize];
-	lst_cr   = new (lst_cr)   short[bufsize];
-	lst_bgy  = new (lst_bgy)  short[bufsize];
-	lst_bgcb = new (lst_bgcb) short[bufsize];
-	lst_bgcr = new (lst_bgcr) short[bufsize];
+	lst_y    = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_cb   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_cr   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgy  = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgcb = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
+	lst_bgcr = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 
 	// メモリ確保失敗
 	if(lst_y==NULL || lst_cb==NULL || lst_cr==NULL ||
@@ -265,6 +247,8 @@ int ScanPixel::ClearSample(void)
 *===================================================================*/
 int ScanPixel::GetLGP(LOGO_PIXEL& lgp)
 {
+	if(n==0) throw NO_SAMPLE;
+
 	double A;
 	double B;
 	double temp;
@@ -340,12 +324,15 @@ int ScanPixel::GetAB_Y(double& A,double& B)
 {
 	double A1,A2;
 	double B1,B2;
+	bool r;
 
 	// XY入れ替えたもの両方で平均を取る
 	// 背景がX軸
-	approxim_line(lst_bgy,lst_y,n,A1,B1);
+	r = approxim_line(lst_bgy,lst_y,n,A1,B1);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
 	// 背景がY軸
-	approxim_line(lst_y,lst_bgy,n,A2,B2);
+	r = approxim_line(lst_y,lst_bgy,n,A2,B2);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
 
 	A = (A1+(1/A2))/2;	// 傾きを平均
 	B = (B1+(-B2/A2))/2;	// 切片も平均
@@ -356,9 +343,13 @@ int ScanPixel::GetAB_Cb(double& A,double& B)
 {
 	double A1,A2;
 	double B1,B2;
+	bool r;
 
-	approxim_line(lst_bgcb,lst_cb,n,A1,B1);
-	approxim_line(lst_cb,lst_bgcb,n,A2,B2);
+	r = approxim_line(lst_bgcb,lst_cb,n,A1,B1);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
+
+	r = approxim_line(lst_cb,lst_bgcb,n,A2,B2);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
 
 	A = (A1+(1/A2))/2;	// 傾きを平均
 	B = (B1+(-B2/A2))/2;	// 切片も平均
@@ -369,9 +360,13 @@ int ScanPixel::GetAB_Cr(double& A,double& B)
 {
 	double A1,A2;
 	double B1,B2;
+	bool r;
 
-	approxim_line(lst_bgcr,lst_cr,n,A1,B1);
-	approxim_line(lst_cr,lst_bgcr,n,A2,B2);
+	r = approxim_line(lst_bgcr,lst_cr,n,A1,B1);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
+
+	r = approxim_line(lst_cr,lst_bgcr,n,A2,B2);
+	if(r==false) throw CANNOT_GET_APPROXIMLINE;
 
 	A = (A1+(1/A2))/2;	// 傾きを平均
 	B = (B1+(-B2/A2))/2;	// 切片も平均

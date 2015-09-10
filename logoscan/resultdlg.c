@@ -1,6 +1,6 @@
 /*====================================================================
 * 	解析結果ダイアログ			resultdlg.cpp
-* 								最終更新：2003/05/10
+* 								最終更新：2003/06/17
 *===================================================================*/
 #include <windows.h>
 #include "..\filter.h"
@@ -8,7 +8,6 @@
 #include "resultdlg.h"
 #include "resource.h"
 #include "..\send_lgd.h"
-#include "xywh.h"
 
 
 #define LGD_FILTER  "ロゴデータファイル (*.lgd)\0*.lgd\0全てのファイル (*.*)\0*.*\0"
@@ -102,6 +101,8 @@ BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 *-------------------------------------------------------------------*/
 static void Wm_initdialog(HWND hdlg)
 {
+	int n;
+
 	// 最大文字数セット
 	SendDlgItemMessage(hdlg,IDC_EDIT,EM_LIMITTEXT,LOGO_MAX_NAME-2,0);
 	// デフォルトロゴ名セット
@@ -111,7 +112,7 @@ static void Wm_initdialog(HWND hdlg)
 
 	// ロゴ消しフィルタを探す
 	delogofp = NULL;
-	for(int n=0;(delogofp=(FILTER*)dlgfp->exfunc->get_filterp(n))!=NULL;n++){
+	for(n=0;(delogofp=(FILTER*)dlgfp->exfunc->get_filterp(n))!=NULL;n++){
 		if(lstrcmp(delogofp->name,LOGO_FILTER_NAME)==0){	// 名前で判別
 			// ロゴ消しフィルタが見つかった
 			WM_SEND_LOGO_DATA = RegisterWindowMessage(wm_send_logo_data);
@@ -136,6 +137,7 @@ static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
 	HDC   hdc;
 	HWND  panel;
 	RECT  rec;
+	double magnify;	// 表示倍率
 
 	lgh = (LOGO_HEADER*)logodata;
 
@@ -186,8 +188,6 @@ static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
 	rec.bottom -= 3;
 
 	// 表示画像の倍率・位置
-	double magnify;	// 倍率
-
 	if(rec.right-rec.left >= lgh->w*2){	// 幅が収まる時
 		if(rec.bottom-rec.top >= lgh->h*2)	// 高さも収まる時
 			magnify = 2;
