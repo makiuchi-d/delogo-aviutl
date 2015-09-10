@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.05
+* 								ver 0.06
 * 
 * 2003
 * 	02/01:	製作開始
@@ -43,12 +43,13 @@
 * 	05/17:	ロゴ名を編集できるようにした。(0.04)
 * 	06/12:	プレビューの背景色をRGBで指定できるように変更。
 * 			位置調整が４の倍数のときcreate_adj_exdata()を呼ばないようにした。（0.05）
+* 	06/30:	フェードイン・アウトに対応。 (0.06)
 * 
 *********************************************************************/
 
 /* ToDo:
-* 	・BS1/2他、いろんなロゴの実装
 * 	・ロゴデータの作成・編集機能
+* 	・フェードイン・アウトに対応すべきなんだろうなぁ
 * 
 *  MEMO:
 * 	・ロゴの拡大縮小ルーチン自装しないとだめかなぁ。
@@ -92,6 +93,7 @@
 
 #define Abs(x) ((x>0)? x:-x)
 
+#define LOGO_FADE_MAX    256
 
 #define LDP_KEY     "logofile"
 #define LDP_DEFAULT "logodata.ldp"
@@ -109,7 +111,6 @@ typedef struct {
 FILTER_DIALOG dialog;
 
 char  logodata_file[MAX_PATH] = { 0 };	// ロゴデータファイル名(INIに保存)
-UINT  WM_SEND_LOGO_DATA;
 
 LOGO_HEADER** logodata   = NULL;
 unsigned int  logodata_n = 0;
@@ -137,27 +138,28 @@ static int  find_logo(const char *logo_name);
 
 static BOOL on_option_button(FILTER* fp);
 
-BOOL func_proc_eraze_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh);
-BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh);
+BOOL func_proc_eraze_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
+BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 
 //----------------------------
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.05 by MakKi";
-#define track_N 6
+char filter_info[] = LOGO_FILTER_NAME" ver 0.06 by MakKi";
+#define track_N 10
 #if track_N
-TCHAR *track_name[]   = { "位置 X", "位置 Y", "深度", "Y", "Cb", "Cr" };	// トラックバーの名前
-int   track_default[] = {   0,   0,   100,   0,   0,   0 };	// トラックバーの初期値
-int   track_s[]       = { -200, -200,   0, -100, -100, -100 };	// トラックバーの下限値
-int   track_e[]       = {  200,  200, 200,  100,  100,  100 };	// トラックバーの上限値
+TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
+							"深度", "Y", "Cb", "Cr", 
+							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
+int   track_default[] = {    0,    0, 100,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
+int   track_s[]       = { -200, -200,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
+int   track_e[]       = {  200,  200, 200,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N
 TCHAR *check_name[]   = { "ロゴ付加モード","ロゴ除去モード" };	// チェックボックス
 int   check_default[] = { 0, 1 };	// デフォルト
 #endif
-
 
 #define LOGO_X      0
 #define LOGO_Y      1
@@ -167,6 +169,10 @@ int   check_default[] = { 0, 1 };	// デフォルト
 #define LOGO_PY     3
 #define LOGO_CB     4
 #define LOGO_CR     5
+#define LOGO_STRT   6
+#define LOGO_FIN    7
+#define LOGO_FOUT   8
+#define LOGO_END    9
 
 // 設定ウィンドウの高さ
 #define WND_Y (67+24*track_N+20*check_N)
@@ -294,10 +300,33 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 {
 	int num;
 	char adjdata[LOGO_MAXSIZE];
+	int fade;
+	int s,e;
 
 	// ロゴ検索
 	num = find_logo(fp->ex_data_ptr);
 	if(num<0) return FALSE;
+
+	// 選択範囲取得
+	if(!fp->exfunc->get_select_frame(fpip->editp,&s,&e))
+		return FALSE;
+
+	// フェード不透明度計算
+	if(fpip->frame < s+fp->track[LOGO_STRT]+fp->track[LOGO_FIN]){
+		if(fpip->frame < s+fp->track[LOGO_STRT])
+			return FALSE;	// フェードイン前
+		else	// フェードイン
+			fade = (fpip->frame-s-fp->track[LOGO_STRT]+1)*LOGO_FADE_MAX / (fp->track[LOGO_FIN]+1);
+	}
+	else if(fpip->frame > e-fp->track[LOGO_FOUT]-fp->track[LOGO_END]){
+		if(fpip->frame > e-fp->track[LOGO_END])
+			return FALSE;	// フェードアウト後
+		else	// フェードアウト
+			fade = (e-fpip->frame-fp->track[LOGO_END]+1)*LOGO_FADE_MAX / (fp->track[LOGO_FOUT]+1);
+	}
+	else
+		fade = LOGO_FADE_MAX;	// 通常
+
 
 	if(fp->track[LOGO_X]%4 || fp->track[LOGO_Y]%4){
 		// 位置調整が４の倍数でないとき、1/4ピクセル単位調整
@@ -312,15 +341,15 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 	}
 
 	if(fp->check[1])	// 除去モードチェック
-		return func_proc_eraze_logo(fp,fpip,(void *)adjdata);	// ロゴ除去モード
+		return func_proc_eraze_logo(fp,fpip,(void *)adjdata,fade);	// ロゴ除去モード
 	else
-		return func_proc_add_logo(fp,fpip,(void *)adjdata);		// ロゴ付加モード
+		return func_proc_add_logo(fp,fpip,(void *)adjdata,fade);	// ロゴ付加モード
 }
 
 /*--------------------------------------------------------------------
 * 	func_proc_eraze_logo()	ロゴ除去モード
 *-------------------------------------------------------------------*/
-BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh)
+BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int fade)
 {
 	int   i,j;
 	int   y,cb,cr;
@@ -344,29 +373,32 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh)
 			{
 				// 輝度
 				dp = lgp->dp_y * ((double)fp->track[LOGO_YDP]/100);	// 調整
+				dp = dp * fade / LOGO_FADE_MAX;						// フェード不透明度
 				y  = lgp->y + fp->track[LOGO_PY]*16;
-				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
+				if(dp==LOGO_MAX_DP) dp--;							// 0での除算回避
 				temp = ((double)ptr->y*LOGO_MAX_DP - y*dp) / (LOGO_MAX_DP - dp) +0.5;	// 逆算
-				if  (temp>4096) temp = 4096;	// 範囲チェック
-				else if(temp<0) temp = 0;
+//				if  (temp>4096) temp = 4096;	// 範囲チェック
+//				else if(temp<0) temp = 0;
 				ptr->y = temp;
 
 				// 色差(青)
 				dp = lgp->dp_cb * ((double)fp->track[LOGO_CBDP]/100);
+				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cb = lgp->cb    + fp->track[LOGO_CB]*16;
 				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
 				temp = ((double)ptr->cb*LOGO_MAX_DP - cb*dp) / (LOGO_MAX_DP - dp) +0.5;
-				if      (temp>2048) temp =  2048;	// 範囲チェック
-				else if(temp<-2048) temp = -2048;
+//				if      (temp>2048) temp =  2048;	// 範囲チェック
+//				else if(temp<-2048) temp = -2048;
 				ptr->cb = temp;
 
 				// 色差(赤)
 				dp = lgp->dp_cr * ((double)fp->track[LOGO_CRDP]/100);
+				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cr = lgp->cr   + fp->track[LOGO_CR]*16;
 				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
 				temp = ((double)ptr->cr*LOGO_MAX_DP - cr*dp) / (LOGO_MAX_DP - dp) +0.5;
-				if      (temp>2048) temp =  2048;	// 範囲チェック
-				else if(temp<-2048) temp = -2048;
+//				if      (temp>2048) temp =  2048;	// 範囲チェック
+//				else if(temp<-2048) temp = -2048;
 				ptr->cr = temp;
 
 			}	// if画面内
@@ -384,7 +416,7 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh)
 /*--------------------------------------------------------------------
 * 	func_proc_add_logo()	ロゴ付加モード
 *-------------------------------------------------------------------*/
-BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh)
+BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int fade)
 {
 	int   i,j;
 	int   y,cb,cr;
@@ -409,27 +441,30 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh)
 
 				// 輝度
 				dp = lgp->dp_y * ((double)fp->track[LOGO_YDP]/100);
+				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				y  = lgp->y    + fp->track[LOGO_PY]*16;
 				temp  = ((double)ptr->y*(LOGO_MAX_DP-dp) + y*dp) / LOGO_MAX_DP +0.5;	// ロゴ付加
-				if  (temp>4096) temp = 4096;	// 範囲チェック
-				else if(temp<0) temp = 0;
+//				if  (temp>4096) temp = 4096;	// 範囲チェック
+//				else if(temp<0) temp = 0;
 				ptr->y = temp;
 
 
 				// 色差(青)
 				dp = lgp->dp_cb * ((double)fp->track[LOGO_CBDP]/100);
+				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cb = lgp->cb    + fp->track[LOGO_CB]*16;
 				temp  = ((double)ptr->cb*(LOGO_MAX_DP-dp) + cb*dp) / LOGO_MAX_DP +0.5;
-				if     (temp> 2048) temp =  2048;	// 範囲チェック
-				else if(temp<-2048) temp = -2048;
+//				if     (temp> 2048) temp =  2048;	// 範囲チェック
+//				else if(temp<-2048) temp = -2048;
 				ptr->cb = temp;
 
 				// 色差(赤)			//pow(2,(double)fp->track[LOGO_CRDP]/128);
 				dp = lgp->dp_cr * ((double)fp->track[LOGO_CRDP]/100);
+				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cr = lgp->cr   + fp->track[LOGO_CR]*16;
 				temp  = ((double)ptr->cr*(LOGO_MAX_DP-dp) + cr*dp) / LOGO_MAX_DP +0.5;
-				if     (temp> 2048) temp =  2048;	// 範囲チェック
-				else if(temp<-2048) temp = -2048;
+//				if     (temp> 2048) temp =  2048;	// 範囲チェック
+//				else if(temp<-2048) temp = -2048;
 				ptr->cr = temp;
 
 			}	// if画面内
@@ -1062,6 +1097,8 @@ static void set_sended_data(void* data,FILTER* fp)
 
 	logodata[logodata_n-1] = ptr;
 	set_combo_item(ptr);
+
+	lstrcpy(fp->ex_data_ptr,ptr);	// 拡張領域にロゴ名をコピー
 }
 
 //*/

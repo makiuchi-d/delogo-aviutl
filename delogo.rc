@@ -33,19 +33,19 @@ FONT 9, "ＭＳ Ｐゴシック"
 	GROUPBOX    "プレビュー背景色", IDC_GROUP, 8,160,145,25,WS_VISIBLE
 
 	LTEXT    "R", IDC_STATIC,  17,171,8,8
-	EDITTEXT      IDC_RED,     25,169,30,12,  ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+	EDITTEXT      IDC_RED,     25,169,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
 	CONTROL  "Spin1",IDC_SPINR,"msctls_updown32",
 	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
 			 0,0,0,0
 
 	LTEXT    "G", IDC_STATIC,  62,171,8,8
-	EDITTEXT      IDC_GREEN,   70,169,30,12,  ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+	EDITTEXT      IDC_GREEN,   70,169,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
 	CONTROL  "Spin1",IDC_SPING,"msctls_updown32",
 	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
 			 0,0,0,0
 
 	LTEXT    "B", IDC_STATIC, 107,171,8,8
-	EDITTEXT      IDC_BLUE,   115,169,30,12,  ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+	EDITTEXT      IDC_BLUE,   115,169,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
 	CONTROL  "Spin1",IDC_SPINB,"msctls_updown32",
 	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
 			 0,0,0,0
@@ -74,8 +74,8 @@ FONT 9, "ＭＳ Ｐゴシック"
 //  VERSION INFO
 //
 VS_VIRSION_INFO VERSIONINFO
- FILEVERSION    0,0,5,0
- PRODUCTVERSION 0,0,5
+ FILEVERSION    0,0,6,0
+ PRODUCTVERSION 0,0,6
  FILEFLAGSMASK  0x3FL
  FILEFLAGS      0x0L
  FILEOS         VOS__WINDOWS32
@@ -88,12 +88,12 @@ VS_VIRSION_INFO VERSIONINFO
 		{
 			VALUE "Comments",         "ロゴサンプル提供者募集中\0"
             VALUE "FileDescription",  "透過性ロゴ フィルタ Plugin for AviUtl 0.98\0"
-            VALUE "FileVersion",      "0.0.5.0\0"
+            VALUE "FileVersion",      "0.0.6.0\0"
             VALUE "InternalName",     "deLogo\0"
             VALUE "LegalCopyright",   "(C) MakKi\0"
             VALUE "OriginalFilename", "delogo.aup\0"
             VALUE "ProductName",      "透過性ロゴ フィルタ\0"
-            VALUE "ProductVersion",   "0.0.5\0"
+            VALUE "ProductVersion",   "0.0.6\0"
 		}
 	}
     BLOCK "VarFileInfo"

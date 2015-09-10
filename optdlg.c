@@ -164,9 +164,9 @@ static void Wm_initdialog(HWND hdlg)
 	SendDlgItemMessage(hdlg,IDC_RED,   EM_SETLIMITTEXT, 3,0);
 	SendDlgItemMessage(hdlg,IDC_GREEN, EM_SETLIMITTEXT, 3,0);
 	SendDlgItemMessage(hdlg,IDC_BLUE,  EM_SETLIMITTEXT, 3,0);
-	SendDlgItemMessage(hdlg,IDC_SPINR, UDM_SETRANGE, 0, 256);
-	SendDlgItemMessage(hdlg,IDC_SPING, UDM_SETRANGE, 0, 256);
-	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 256);
+	SendDlgItemMessage(hdlg,IDC_SPINR, UDM_SETRANGE, 0, 255);
+	SendDlgItemMessage(hdlg,IDC_SPING, UDM_SETRANGE, 0, 255);
+	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 255);
 }
 
 
@@ -731,7 +731,7 @@ static void DispLogo(HWND hdlg)
 }
 
 /*--------------------------------------------------------------------
-* 	DispLogo()	ロゴを表示
+* 	set_bgyc()	プレビュー背景色を取得
 *-------------------------------------------------------------------*/
 static void set_bgyc(HWND hdlg)
 {

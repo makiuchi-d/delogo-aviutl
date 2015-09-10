@@ -51,10 +51,10 @@
 *		ロゴの基本的な情報を記録
 *-------------------------------------------------------------------*/
 typedef struct {
-	char     name[LOGO_MAX_NAME]; 	// 名称
-	short    x, y;      			// 基本位置
-	short    h, w;      			// ロゴ高さ・幅
-	int      reserve[2];			// 拡張用に予約
+	char     name[LOGO_MAX_NAME]; 	/* 名称         */
+	short    x, y;      			/* 基本位置     */
+	short    h, w;      			/* ロゴ高さ・幅 */
+	int      reserve[2];			/* 拡張用に予約 */
 } LOGO_HEADER;
 
 /*--------------------------------------------------------------------
@@ -62,12 +62,12 @@ typedef struct {
 *		ロゴの各ピクセルごとの情報を記録
 *-------------------------------------------------------------------*/
 typedef struct {
-	short dp_y;		// 不透明度（輝度）
-	short y;		// 輝度
-	short dp_cb;	// 不透明度（青）
-	short cb;		// 色差（青）
-	short dp_cr;	// 不透明度（赤）
-	short cr;		// 色差（赤）
+	short dp_y;		/* 不透明度（輝度）*/
+	short y;		/* 輝度            */
+	short dp_cb;	/* 不透明度（青）  */
+	short cb;		/* 色差（青）      */
+	short dp_cr;	/* 不透明度（赤）  */
+	short cr;		/* 色差（赤）      */
 } LOGO_PIXEL;
 
 
