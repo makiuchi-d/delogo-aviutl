@@ -27,6 +27,9 @@ protected:
 	unsigned int bufsize;
 
 public:
+	static unsigned int Defbuf;
+
+
 	ScanPixel(void);
 	~ScanPixel();
 

@@ -4,16 +4,17 @@
 //////////////////////////////////////////////////////////////////////
 
 //#include <winres.h>
+
 #include "resource.h"
 
 //////////////////////////////////////////////////////////////////////
 // 解析結果ダイアログ
 //
 
-RESULT_DLG DIALOG  0,0, 158,121
-STYLE WS_VISIBLE | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_SYSMENU
-CAPTION "ロゴ解析結果"
-FONT 9, "ＭＳ Ｐゴシック"
+RESULT_DLG DIALOG  10,10, 158,121
+STYLE    DS_MODALFRAME | WS_VISIBLE | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION  "ロゴ解析結果"
+FONT     9, "ＭＳ Ｐゴシック"
 {
 	LTEXT     "ロゴ名", IDC_TEXT, 8,10,20,9
 	EDITTEXT  IDC_EDIT, 34, 8,115,12
@@ -24,23 +25,60 @@ FONT 9, "ＭＳ Ｐゴシック"
 
 	GROUPBOX    "背景色", IDC_GROUP, 8,90,142,25,WS_VISIBLE
 
-	PUSHBUTTON    "黒" , IDC_BLACK,  15,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
-	PUSHBUTTON    "白" , IDC_WHITE,  40,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
-	PUSHBUTTON    "赤" , IDC_RED,    65,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
-	PUSHBUTTON    "緑" , IDC_GREEN,  90,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
-	PUSHBUTTON    "青" , IDC_BLUE,  115,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+	LTEXT    "R", IDC_TEXT,  16,101,8,8
+	EDITTEXT      IDC_RED,   24, 99,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
+	CONTROL  "Spin1",IDC_SPINR,"msctls_updown32",
+	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
+			 0,0,0,0
 
+	LTEXT    "G", IDC_TEXT,  61,101,8,8
+	EDITTEXT      IDC_GREEN, 69, 99,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
+	CONTROL  "Spin1",IDC_SPING,"msctls_updown32",
+	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
+			 0,0,0,0
+
+	LTEXT    "B", IDC_TEXT, 106,101,8,8
+	EDITTEXT      IDC_BLUE, 114, 99,30,12,  ES_RIGHT|ES_AUTOHSCROLL|ES_NUMBER|WS_TABSTOP
+	CONTROL  "Spin1",IDC_SPINB,"msctls_updown32",
+	         UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_SETBUDDYINT | UDS_ARROWKEYS,
+			 0,0,0,0
+
+//	PUSHBUTTON    "黒" , IDC_BLACK,  15,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+//	PUSHBUTTON    "白" , IDC_WHITE,  40,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+//	PUSHBUTTON    "赤" , IDC_RED,    65,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+//	PUSHBUTTON    "緑" , IDC_GREEN,  90,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
+//	PUSHBUTTON    "青" , IDC_BLUE,  115,99,20,14, BS_CENTER|BS_VCENTER|BS_AUTORADIOBUTTON
 
 	GROUPBOX    "",       IDC_PANEL, 8,25,100,60,WS_VISIBLE
 
 }
 
 //////////////////////////////////////////////////////////////////////
+// 経過表示・中断ダイアログ
+//
+ABORT_DLG DIALOG  20,20, 150,83
+STYLE    WS_VISIBLE | WS_POPUP | WS_CAPTION | WS_BORDER
+CAPTION  "ロゴ解析中..."
+FONT     9, "ＭＳ Ｐゴシック"
+{
+	DEFPUSHBUTTON "中断", IDC_ABORT, 50,63,50,14, BS_CENTER|BS_VCENTER
+
+	LTEXT "フレームをスキャン中...", IDC_STATUS, 10,7, 120,10
+	CONTROL "Progress1",IDC_PROGRESS,"msctls_progress32",WS_BORDER,8,20,133,12
+
+	RTEXT "0",              IDC_EXAMF,    90,35, 20,10
+	CTEXT "/",              IDC_STATIC,  115,35,  4,10
+	RTEXT "0",              IDC_ALLF,    119,35, 20,10
+	RTEXT "有効サンプル :", IDC_STATIC,   70,48, 45,10
+	RTEXT "0",              IDC_USEABLE, 119,48, 20,10
+}
+
+//////////////////////////////////////////////////////////////////////
 //  VERSION INFO
 //
 VS_VIRSION_INFO VERSIONINFO
- FILEVERSION    0,0,0,3
- PRODUCTVERSION 0,0,0
+ FILEVERSION    0,0,4,0
+ PRODUCTVERSION 0,0,4
  FILEFLAGSMASK  0x3FL
  FILEFLAGS      0x0L
  FILEOS         VOS__WINDOWS32
@@ -51,14 +89,14 @@ VS_VIRSION_INFO VERSIONINFO
 	{
         BLOCK "041103A4"
 		{
-			VALUE "Comments",         "beta version\0"
+//			VALUE "Comments",         "beta version\0"
             VALUE "FileDescription",  "ロゴ解析 Plugin for AviUtl 0.98d\0"
-            VALUE "FileVersion",      "β03\0"
+            VALUE "FileVersion",      "0.04\0"
             VALUE "InternalName",     "LogoScan\0"
             VALUE "LegalCopyright",   "(C) MakKi\0"
             VALUE "OriginalFilename", "logoscan.aup\0"
             VALUE "ProductName",      "ロゴ解析 プラグイン\0"
-            VALUE "ProductVersion",   "β03\0"
+            VALUE "ProductVersion",   "0.04\0"
 		}
 	}
     BLOCK "VarFileInfo"

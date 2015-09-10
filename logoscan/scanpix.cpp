@@ -24,6 +24,9 @@ const char* NO_SAMPLE = "ÉTÉìÉvÉãÇ™ë´ÇËÇ‹ÇπÇÒ\nÉçÉSÇÃîwåiÇ™íPàÍêFÇÃÉTÉìÉvÉãÇâ¡Ç
 
 #define DP_RANGE 0x3FFF
 
+unsigned int ScanPixel::Defbuf = 512;
+#define BUF_ADDSIZE  128;
+
 /*--------------------------------------------------------------------
 * 	RGBtoYCbCr()
 *-------------------------------------------------------------------*/
@@ -58,7 +61,7 @@ inline T Abs(T x){
 *===================================================================*/
 ScanPixel::ScanPixel(void)
 {
-	bufsize = 32;
+	bufsize = Defbuf;
 	lst_y    = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 	lst_cb   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 	lst_cr   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
@@ -94,6 +97,8 @@ ScanPixel::~ScanPixel()
 *===================================================================*/
 int ScanPixel::Alloc(unsigned int f)
 {
+	if(bufsize==f) return f;
+
 	bufsize = f;
 	if(f<=n) n = f-1;
 
@@ -120,7 +125,7 @@ int ScanPixel::Alloc(unsigned int f)
 int ScanPixel::AddSample(PIXEL_YC& ycp,PIXEL_YC& ycp_bg)
 {
 	if(n>=bufsize){	// ÉoÉbÉtÉ@Ç™ë´ÇËÇ»Ç¢éûÉTÉCÉYïœçX
-		bufsize += 32;
+		bufsize += BUF_ADDSIZE;
 		lst_y    = (short*)realloc(lst_y,   bufsize*sizeof(short));	//new (lst_y)   short[bufsize];
 		lst_cb   = (short*)realloc(lst_cb,  bufsize*sizeof(short));	//new (lst_cb)  short[bufsize];
 		lst_cr   = (short*)realloc(lst_cr,  bufsize*sizeof(short));	//new (lst_cr)  short[bufsize];
@@ -225,7 +230,7 @@ int ScanPixel::ClearSample(void)
 {
 	ScanPixel::~ScanPixel();
 
-	bufsize = 32;
+	bufsize = 128;
 	lst_y    = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 	lst_cb   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
 	lst_cr   = (short*)malloc(bufsize*sizeof(short));	//new short[bufsize];
@@ -247,7 +252,7 @@ int ScanPixel::ClearSample(void)
 *===================================================================*/
 int ScanPixel::GetLGP(LOGO_PIXEL& lgp)
 {
-	if(n==0) throw NO_SAMPLE;
+	if(n<=1) throw NO_SAMPLE;
 
 	double A;
 	double B;

@@ -44,6 +44,8 @@
 * 	06/12:	プレビューの背景色をRGBで指定できるように変更。
 * 			位置調整が４の倍数のときcreate_adj_exdata()を呼ばないようにした。（0.05）
 * 	06/30:	フェードイン・アウトに対応。 (0.06)
+* 	07/02:	ロゴデータを受信できない場合があったのを修正。
+* 	07/03:	YCbCrの範囲チェックをするようにした。（しないと落ちることがある）(0.06a)
 * 
 *********************************************************************/
 
@@ -63,7 +65,7 @@
 * 		→実装完了
 * 	・ダイアログを表示したまま終了するとエラー吐く
 * 		→親ウィンドウをAviUtl本体にすることで終了できなくした
-* 	・ロゴデータ構造少し変えようかな… 色差要素のビットを半分にするとか。ver0.10でやるか？
+* 	・ロゴデータ構造少し変えようかな… 色差要素のビットを半分にするとか。
 * 
 *  新メモリ管理について:(2003/05/08)
 * 	fp->ex_data_ptrにはロゴの名称のみを保存。（7FFDバイトしかプロファイルに保存されず、不具合が生じるため）
@@ -117,7 +119,7 @@ unsigned int  logodata_n = 0;
 
 char ex_data[LOGO_MAX_NAME];	// 拡張データ領域
 
-static UINT  WM_SEND_LOGO_DATA;	// ロゴ受信メッセージ
+static UINT  WM_SEND_LOGO_DATA =0;	// ロゴ受信メッセージ
 
 
 //----------------------------
@@ -377,8 +379,8 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int
 				y  = lgp->y + fp->track[LOGO_PY]*16;
 				if(dp==LOGO_MAX_DP) dp--;							// 0での除算回避
 				temp = ((double)ptr->y*LOGO_MAX_DP - y*dp) / (LOGO_MAX_DP - dp) +0.5;	// 逆算
-//				if  (temp>4096) temp = 4096;	// 範囲チェック
-//				else if(temp<0) temp = 0;
+				if  (temp>4096 +128) temp = 4096 +128;	// 範囲チェック
+				else if(temp<0 -128) temp = 0    -128;
 				ptr->y = temp;
 
 				// 色差(青)
@@ -387,8 +389,8 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int
 				cb = lgp->cb    + fp->track[LOGO_CB]*16;
 				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
 				temp = ((double)ptr->cb*LOGO_MAX_DP - cb*dp) / (LOGO_MAX_DP - dp) +0.5;
-//				if      (temp>2048) temp =  2048;	// 範囲チェック
-//				else if(temp<-2048) temp = -2048;
+				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
+				else if(temp<-2048-128) temp = -2048 -128;
 				ptr->cb = temp;
 
 				// 色差(赤)
@@ -397,8 +399,8 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int
 				cr = lgp->cr   + fp->track[LOGO_CR]*16;
 				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
 				temp = ((double)ptr->cr*LOGO_MAX_DP - cr*dp) / (LOGO_MAX_DP - dp) +0.5;
-//				if      (temp>2048) temp =  2048;	// 範囲チェック
-//				else if(temp<-2048) temp = -2048;
+				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
+				else if(temp<-2048-128) temp = -2048 -128;
 				ptr->cr = temp;
 
 			}	// if画面内
@@ -444,8 +446,8 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int f
 				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				y  = lgp->y    + fp->track[LOGO_PY]*16;
 				temp  = ((double)ptr->y*(LOGO_MAX_DP-dp) + y*dp) / LOGO_MAX_DP +0.5;	// ロゴ付加
-//				if  (temp>4096) temp = 4096;	// 範囲チェック
-//				else if(temp<0) temp = 0;
+				if  (temp>4096 +128) temp = 4096 +128;	// 範囲チェック
+				else if(temp<0 -128) temp = 0    -128;
 				ptr->y = temp;
 
 
@@ -454,8 +456,8 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int f
 				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cb = lgp->cb    + fp->track[LOGO_CB]*16;
 				temp  = ((double)ptr->cb*(LOGO_MAX_DP-dp) + cb*dp) / LOGO_MAX_DP +0.5;
-//				if     (temp> 2048) temp =  2048;	// 範囲チェック
-//				else if(temp<-2048) temp = -2048;
+				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
+				else if(temp<-2048-128) temp = -2048 -128;
 				ptr->cb = temp;
 
 				// 色差(赤)			//pow(2,(double)fp->track[LOGO_CRDP]/128);
@@ -463,8 +465,8 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int f
 				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
 				cr = lgp->cr   + fp->track[LOGO_CR]*16;
 				temp  = ((double)ptr->cr*(LOGO_MAX_DP-dp) + cr*dp) / LOGO_MAX_DP +0.5;
-//				if     (temp> 2048) temp =  2048;	// 範囲チェック
-//				else if(temp<-2048) temp = -2048;
+				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
+				else if(temp<-2048-128) temp = -2048 -128;
 				ptr->cr = temp;
 
 			}	// if画面内

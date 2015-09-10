@@ -1,5 +1,5 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver.β02
+* 	ロゴ解析プラグイン		ver.β03a
 * 
 * 2003
 * 	04/06:	とりあえず完成。
@@ -21,12 +21,20 @@
 * 	06/16:	エラーメッセージを一部修正
 * 			ロゴ範囲の形に色が変になるバグ修正
 * 			wとhを間違えていたなんて…鬱だ
-* 			背景が単一色かどうかを内部で判定するようにした。
-* 	06/17:	昨日の修正で入れてしまったバグを修正
+* 			背景が単一色かどうかを内部で判定するようにした
+* 			選択範囲内だけを解析するようにした
+* 	06/17:	昨日の修正で入れてしまったバグを修正	(β03)
+* 	06/18:	最初のフレームを表示させていると解析できないバグ修正 (β03a)
+* 			結果ダイアログのプレビュー背景色をRGBで指定するように変更
+* 
+* [正式版]
+* 	07/02:	中断できるようにした。
+* 			このために処理の流れを大幅に変更。
+* 	07/03:	プロファイルの変更フレームで無限ループになるバグ回避（0.04)
 * 
 *********************************************************************/
 /*	TODO:
-* 	・中断処理付けないとなー
+* 	・拡大ツール機能（気まぐれバロンさんのアイディア)
 * 
 * 	MEMO:
 * 	・背景値計算改善策①：メディアン化してから平均とか
@@ -42,13 +50,13 @@
 #include "..\\logo.h"
 #include "scanpix.h"
 #include "resultdlg.h"
-
-//#include <stdio.h>
+#include "abort.h"
 
 
 // ボタン
 #define ID_SCANBTN  40010
 HWND scanbtn;
+AbortDlgParam param;
 
 short dn_x,dn_y;	// マウスダウン座標
 short up_x,up_y;	// アップ座標
@@ -56,20 +64,6 @@ bool  flg_mouse_down = 0;	// マウスダウンフラグ
 
 void *logodata = NULL;	// ロゴデータ（解析結果）
 
-class XYWH {
-public:
-	short x;
-	short y;
-	short w;
-	short h;
-
-	XYWH(void)
-		{ x=y=w=h=-1; }
-	XYWH(XYWH& r)
-		{ x=r.x; y=r.y; w=r.w; h=r.h; }
-	XYWH(int nx,int ny,int nw,int nh)
-		{ x=nx; y=ny; w=nw; h=nh; }
-};
 //----------------------------
 //	プロトタイプ宣言
 //----------------------------
@@ -78,16 +72,12 @@ inline void SetXYWH(FILTER* fp,void* editp);
 inline void SetRange(FILTER* fp,void* editp);
 void ScanLogoData(FILTER* fp,void* editp);
 void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*);
-bool Cal_BGcolor(PIXEL_YC&,PIXEL_YC*,XYWH&,int,int);
-void CreateLogoData(FILTER* fp,ScanPixel*& sp);
-int  comp_short(const void* x,const void* y);
-static short med_average(short* s,int n);
 
 //----------------------------
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver.β03 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.04 by MakKi";
 
 #define track_N 5
 #if track_N
@@ -168,21 +158,19 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 	if(!fp->exfunc->is_editing(fpip->editp))
 		return FALSE;
 
-	XYWH logo(fp->track[tLOGOX],fp->track[tLOGOY],fp->track[tLOGOW],fp->track[tLOGOH]);
-
 	// 範囲外
-	if(logo.x==0 || logo.y==0) return FALSE;
-	if(logo.x+logo.w > fpip->w) return FALSE;
-	if(logo.y+logo.h > fpip->h) return FALSE;
+	if(fp->track[tLOGOX]==0 || fp->track[tLOGOY]==0) return FALSE;
+	if(fp->track[tLOGOX]+fp->track[tLOGOW] > fpip->w) return FALSE;
+	if(fp->track[tLOGOY]+fp->track[tLOGOH] > fpip->h) return FALSE;
 
 	PIXEL_YC* ptr;
 	int i;
 
 	// 枠を書き込む(Ⅰピクセル外側に）
 	// X-1,Y-1に移動
-	ptr = fpip->ycp_edit + (logo.x-1) + (logo.y-1) * fpip->max_w;
+	ptr = fpip->ycp_edit + (fp->track[tLOGOX]-1) + (fp->track[tLOGOY]-1) * fpip->max_w;
 	// 横線（上）ネガポジ
-	for(i=0;i<=logo.w+1;i++){
+	for(i=0;i<=fp->track[tLOGOW]+1;i++){
 		ptr->y = 4096 - ptr->y;
 		ptr->cb *= -1;
 		ptr->cr *= -1;
@@ -190,30 +178,28 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 	}
 	ptr += fpip->max_w - i;
 	// 縦線
-	for(i=1;i<=logo.h;i++){
+	for(i=1;i<=fp->track[tLOGOH];i++){
 		// 左線
 		ptr->y = 4096 - ptr->y;
 		ptr->cb *= -1;
 		ptr->cr *= -1;
 		// 右線
-		if(logo.w>=0){
-			ptr[logo.w+1].y  = 4096 - ptr[logo.w+1].y;
-			ptr[logo.w+1].cb *= -1;
-			ptr[logo.w+1].cr *= -1;
+		if(fp->track[tLOGOW]>=0){
+			ptr[fp->track[tLOGOW]+1].y  = 4096 - ptr[fp->track[tLOGOW]+1].y;
+			ptr[fp->track[tLOGOW]+1].cb *= -1;
+			ptr[fp->track[tLOGOW]+1].cr *= -1;
 		}
 		ptr += fpip->max_w;
 	}
 	// 横線（下）
-	if(logo.h>=0){
-		for(i=0;i<=logo.w+1;i++){
+	if(fp->track[tLOGOH]>=0){
+		for(i=0;i<=fp->track[tLOGOW]+1;i++){
 			ptr->y = 4096 - ptr->y;
 			ptr->cb *= -1;
 			ptr->cr *= -1;
 			ptr++;
 		}
 	}
-
-
 
 	return TRUE;
 }
@@ -230,7 +216,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 
 		case WM_FILTER_CHANGE_PARAM:
 			SetRange(fp,editp);
-			return TRUE;
+			return FALSE;
 
 		//--------------------------------------------マウスメッセージ
 		case WM_FILTER_MAIN_MOUSE_DOWN:
@@ -269,8 +255,10 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 		case WM_COMMAND:
 			switch(LOWORD(wparam)){
 				case ID_SCANBTN:
+					EnableWindow(hwnd,FALSE);
 					ScanLogoData(fp,editp);
-					return TRUE;
+					EnableWindow(hwnd,TRUE);
+					break;
 			}
 			break;
 
@@ -279,6 +267,11 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 		case WM_MOUSEWHEEL:
 			SendMessage(GetWindow(hwnd, GW_OWNER), message, wparam, lparam);
 			break;
+
+		//----------------------------------------------独自メッセージ
+		case WM_SP_DRAWFRAME:
+			fp->exfunc->set_frame(editp,lparam);
+			return TRUE;
 	}
 
 	return FALSE;
@@ -382,8 +375,11 @@ void ScanLogoData(FILTER* fp,void* editp)
 			throw "フィルタを有効にしてください";
 
 		// 必要な情報を集める
-		frame   = fp->exfunc->get_frame(editp);
+		frame   = fp->exfunc->get_frame_n(editp);
 		if(!frame) throw "映像が読み込まれていません";
+
+		frame   = fp->exfunc->get_frame(editp);
+
 		fp->exfunc->get_select_frame(editp,&start,&end);
 		if(end-start<1) throw "画像の枚数が足りません";
 
@@ -404,11 +400,8 @@ void ScanLogoData(FILTER* fp,void* editp)
 			if(defname[i]=='.') defname[i] = '\0';	// 2文字目以降の'.'を終端にする
 		wsprintf(defname,"%s %dx%d",defname,w,h);	// デフォルトロゴ名作成
 
-		// ScanPixelを設定する
+		// ScanPixelを設定する+解析・ロゴデータ作成
 		SetScanPixel(fp,sp,w,h,start,end,editp);
-
-		// 解析・ロゴデータ作成
-		CreateLogoData(fp,sp);
 	}
 	catch(const char* str){
 		MessageBox(fp->hwnd,str,filter_name,MB_OK|MB_ICONERROR);
@@ -426,7 +419,6 @@ void ScanLogoData(FILTER* fp,void* editp)
 		sp=NULL;
 	}
 
-	SetWindowText(GetWindow(fp->hwnd,GW_OWNER),"解析完了");
 
 	// 表示フレームを戻す
 	fp->exfunc->set_frame(editp,frame);
@@ -448,186 +440,41 @@ void ScanLogoData(FILTER* fp,void* editp)
 *-------------------------------------------------------------------*/
 void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp)
 {
-	XYWH xywh(fp->track[tLOGOX],fp->track[tLOGOY],fp->track[tLOGOW],fp->track[tLOGOH]);
-
 	// 範囲チェック
-	if(xywh.w<=0 || xywh.h<=0)
+	if(fp->track[tLOGOW]<=0 || fp->track[tLOGOH]<=0)
 		throw "領域が指定されていません";
-	if( (xywh.x+xywh.w > w-1) ||
-		(xywh.y+xywh.h > h-1) )
+	if( (fp->track[tLOGOX]+fp->track[tLOGOW] > w-1) ||
+		(fp->track[tLOGOY]+fp->track[tLOGOH] > h-1) )
 			throw "領域の一部が画面外です";
 
 	// メモリ確保
 	if(sp) delete[] sp;
-	sp = new ScanPixel[xywh.w*xywh.h];	// 幅×高さの配列
+	ScanPixel::Defbuf = 1024;
+	sp = new ScanPixel[fp->track[tLOGOW]*fp->track[tLOGOH]];	// 幅×高さの配列
 	if(sp==NULL)
 		throw "メモリが確保できませんでした";
 
-	char wndtitle[128];
 
-	for(int i=0;i<xywh.w*xywh.h;i++)
-		sp[i].Alloc(e-s+1);
+	param.fp     = fp;
+	param.editp  = editp;
+	param.sp     = sp;
+	param.s      = s;
+	param.e      = e;
+	param.max_w  = w;
+	param.x      = fp->track[tLOGOX];
+	param.y      = fp->track[tLOGOY];
+	param.w      = fp->track[tLOGOW];
+	param.h      = fp->track[tLOGOH];
+	param.t      = fp->track[tTHY];
+	param.data   = &logodata;
+	param.errstr = NULL;
 
-	// 各フレーム処理
-	for(int n=s;n<=e;n++){
+	DialogBoxParam(fp->dll_hinst,"ABORT_DLG",GetWindow(fp->hwnd,GW_OWNER),AbortDlgProc,(LPARAM)&param);
 
-// ここで中断判定
-
-		// 表示フレームを更新
-		fp->exfunc->set_frame(editp,n);
-		wsprintf(wndtitle,"ロゴ解析中...  [%d/%d]",n-s+1,e-s+1);
-		SetWindowText(GetWindow(fp->hwnd,GW_OWNER),wndtitle);
-
-		// 画像取得
-		PIXEL_YC* pix = fp->exfunc->get_ycp_filtering_cache_ex(fp,editp,n,NULL,NULL);
-
-		// 背景平均値計算
-		PIXEL_YC bg;
-
-		if(Cal_BGcolor(bg,pix,xywh,w,fp->track[tTHY])==false)
-			// 単一背景でないときサンプルをセットしない
-			continue;
-/*
-FILE* file;
-file=fopen("logoscan.txt","a");
-fprintf(file,"%d\n",n+1);
-fclose(file);
-*/
-		// ロゴサンプルセット
-		for(int i=0;i<xywh.h;i++){
-			for(int j=0;j<xywh.w;j++){
-				PIXEL_YC ptr;
-				ptr = pix[(xywh.y+i)*w + xywh.x+j];
-				sp[i*xywh.w+j].AddSample(ptr,bg);	// X軸:背景
-			}
-		}
-
-	}// フレーム処理ここまで
+	if(param.errstr)
+		throw param.errstr;
 }
 
-/*--------------------------------------------------------------------
-*	背景色計算
-*-------------------------------------------------------------------*/
-bool Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int thy)
-{
-	short* y;	// 背景色配列
-	short* cb;
-	short* cr;
-	int i,n;
 
-	n = 0;
-
-	// (幅+高さ+2)*2
-	y  = new short[(xywh.w+xywh.h+2)*2];
-	cb = new short[(xywh.w+xywh.h+2)*2];
-	cr = new short[(xywh.w+xywh.h+2)*2];
-
-	pix += xywh.x-1 + (xywh.y-1)*w;	// X-1,Y-1に移動
-
-	// 横線（上）合計
-	for(i=0;i<=xywh.w+1;i++){
-		y[n]  = pix->y;
-		cb[n] = pix->cb;
-		cr[n] = pix->cr;
-		n++;
-		pix++;
-	}
-	pix += w - i;	// 次の行へ
-	// 縦線
-	for(i=2;i<=xywh.h+1;i++){
-		// 左線
-		y[n]  = pix->y;
-		cb[n] = pix->cb;
-		cr[n] = pix->cr;
-		n++;
-		// 右線
-		y[n]  = pix[xywh.w+1].y;
-		cb[n] = pix[xywh.w+1].cb;
-		cr[n] = pix[xywh.w+1].cr;
-		n++;
-
-		pix += w;	// 次の行へ
-	}
-	// 横線（下）合計
-	for(i=0;i<=xywh.w+1;i++){
-		y[n]  = pix->y;
-		cb[n] = pix->cb;
-		cr[n] = pix->cr;
-		n++;
-		pix++;
-	}
-
-	// ソートして真中らへんを平均
-	r.y  = med_average(y,n);
-	r.cb = med_average(cb,n);
-	r.cr = med_average(cr,n);
-
-	bool ret = true;	// 返却値
-
-	// 最小と最大が閾値以上離れている場合、単一色でないと判断
-	if((abs(y[0] - y[n-1])>thy*8) ||
-	   (abs(cb[0]-cb[n-1])>thy*8) ||
-	   (abs(cr[0]-cr[n-1])>thy*8))
-			ret = false;
-
-	delete[] y;
-	delete[] cb;
-	delete[] cr;
-
-	return ret;
-}
-
-/*--------------------------------------------------------------------
-*	ロゴデータを作成
-*-------------------------------------------------------------------*/
-void CreateLogoData(FILTER* fp,ScanPixel*& sp)
-{
-	// ロゴヘッダ作成（名称以外）
-	LOGO_HEADER lgh;
-	ZeroMemory(&lgh,sizeof(LOGO_HEADER));
-	lgh.x = fp->track[tLOGOX];
-	lgh.y = fp->track[tLOGOY];
-	lgh.w = fp->track[tLOGOW];
-	lgh.h = fp->track[tLOGOH];
-
-	// ロゴデータ領域確保
-	logodata = (void*) new char[LOGO_DATASIZE(&lgh)];
-	if(logodata==NULL) throw "メモリ確保できませんでした";
-	*((LOGO_HEADER*)logodata) = lgh;	// ヘッダコピー
-
-	LOGO_PIXEL* lgp;
-	lgp = (LOGO_PIXEL*) ((LOGO_HEADER*)logodata+1);
-
-	for(int i=0;i<lgh.w*lgh.h;i++)
-		sp[i].GetLGP(lgp[i]);
-}
-
-/*--------------------------------------------------------------------
-*	short型比較関数（qsort用）
-*-------------------------------------------------------------------*/
-int comp_short(const void* x,const void* y)
-{
-	return (*(const short*)x - *(const short*)y);
-}
-
-/*--------------------------------------------------------------------
-*	ソートして真中らへんを平均
-*-------------------------------------------------------------------*/
-static short med_average(short* s,int n)
-{
-	double t  =0.0;
-	int    nn =0;
-
-	// ソートする
-	qsort(s,n,sizeof(short),comp_short);
-
-	// 真中らへんを平均
-	for(int i=n/3;i<n-(n/3);i++,nn++)
-		t += s[i];
-
-	t = t / nn + 0.5;
-
-	return ((short)t);
-}
 
 //*/

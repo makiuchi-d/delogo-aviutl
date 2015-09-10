@@ -1,8 +1,12 @@
 /*====================================================================
 * 	解析結果ダイアログ			resultdlg.cpp
-* 								最終更新：2003/06/17
+* 
+* 2003
+* 	06/18:	背景色の指定をRGBに変更
+* 
 *===================================================================*/
 #include <windows.h>
+#include <commctrl.h>
 #include "..\filter.h"
 #include "..\logo.h"
 #include "resultdlg.h"
@@ -19,12 +23,6 @@ char    defname[32];	// デフォルトロゴ名
 
 PIXEL* pix;	// 表示用ビットマップ
 BITMAPINFO  bmi;
-const PIXEL_YC yc_black = {    0,    0,    0 };	// 黒
-const PIXEL_YC yc_white = { 4080,    0,    0 };	// 白
-const PIXEL_YC yc_red   = { 1220, -688, 2040 };	// 赤
-const PIXEL_YC yc_green = { 2393,-1351,-1707 };	// 緑
-const PIXEL_YC yc_blue  = {  467, 2040, -333 };	// 青
-
 
 UINT WM_SEND_LOGO_DATA;	// ロゴデータ送信メッセージ
 FILTER* delogofp;	// ロゴ消しフィルタFILTER構造体
@@ -37,19 +35,25 @@ extern char  filter_name[];	// フィルタ名 [filter.cpp]
 // 	プロトタイプ
 //----------------------------
 static void Wm_initdialog(HWND hdlg);
-static void DispLogo(HWND hdlg,const PIXEL_YC ycbg);
+static void DispLogo(HWND hdlg);
 static void idc_save(HWND hdlg);
 static void ExportLogoData(char *fname,void *data,HWND hdlg);
 static void SendLogoData(HWND hdlg);
+static PIXEL_YC* get_bgyc(HWND hdlg);
+
 
 /*====================================================================
-* 	OptDlgProc()		コールバックプロシージャ
+* 	ResultDlgProc()		コールバックプロシージャ
 *===================================================================*/
 BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 {
 	switch(msg){
 		case WM_INITDIALOG:
 			Wm_initdialog(hdlg);
+			break;
+
+		case WM_PAINT:
+			DispLogo(hdlg);
 			break;
 
 		case WM_COMMAND:
@@ -69,24 +73,11 @@ BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 					break;
 
 				//--------------------------------背景色設定
-				case IDC_BLACK:
-					DispLogo(hdlg,yc_black);
-					return TRUE;
-
-				case IDC_WHITE:
-					DispLogo(hdlg,yc_white);
-					return TRUE;
 
 				case IDC_RED:
-					DispLogo(hdlg,yc_red);
-					return TRUE;
-
 				case IDC_GREEN:
-					DispLogo(hdlg,yc_green);
-					return TRUE;
-
 				case IDC_BLUE:
-					DispLogo(hdlg,yc_blue);
+					DispLogo(hdlg);
 					return TRUE;
 			}
 			break;
@@ -108,7 +99,17 @@ static void Wm_initdialog(HWND hdlg)
 	// デフォルトロゴ名セット
 	SetDlgItemText(hdlg,IDC_EDIT,defname);
 
-	pix = NULL;
+	// RGBエディット・スピンのレンジ設定
+	SendDlgItemMessage(hdlg,IDC_RED,   EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_GREEN, EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_BLUE,  EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,IDC_SPINR, UDM_SETRANGE, 0, 255);
+	SendDlgItemMessage(hdlg,IDC_SPING, UDM_SETRANGE, 0, 255);
+	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 255);
+
+	// メモリ確保
+	pix = (PIXEL*)VirtualAlloc(NULL,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL)
+																	,MEM_RESERVE,PAGE_READWRITE);
 
 	// ロゴ消しフィルタを探す
 	delogofp = NULL;
@@ -119,7 +120,6 @@ static void Wm_initdialog(HWND hdlg)
 			return;
 		}
 	}
-
 	// みつからなかった時
 	delogofp = NULL;
 	EnableWindow(GetDlgItem(hdlg,IDC_SEND),FALSE);	// 送信禁止
@@ -128,11 +128,12 @@ static void Wm_initdialog(HWND hdlg)
 /*--------------------------------------------------------------------
 * 	DispLogo()	ロゴを表示
 *-------------------------------------------------------------------*/
-static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
+static void DispLogo(HWND hdlg)
 {
 	LOGO_HEADER *lgh;
 	LOGO_PIXEL  *lgp;
 	PIXEL_YC    yc;
+	PIXEL_YC*   ycbg;
 	int   i,j,t;
 	HDC   hdc;
 	HWND  panel;
@@ -140,6 +141,9 @@ static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
 	double magnify;	// 表示倍率
 
 	lgh = (LOGO_HEADER*)logodata;
+
+	// 背景色取得
+	ycbg = get_bgyc(hdlg);
 
 	// BITMAPINFO設定
 	ZeroMemory(&bmi,sizeof(BITMAPINFO));
@@ -153,7 +157,7 @@ static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
 	// メモリ再確保
 	pix = (PIXEL*)VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL)
 																	,MEM_COMMIT,PAGE_READWRITE);
-	if(pix==NULL){	// メモリ確保失敗
+	if(pix==NULL){
 		MessageBox(hdlg,"メモリが確保できませんでした\nDispLogo()",filter_name,MB_OK|MB_ICONERROR);
 		return;	// 何もしない
 	}
@@ -164,11 +168,11 @@ static void DispLogo(HWND hdlg,const PIXEL_YC ycbg)
 	for(i=0;i<lgh->h;i++){
 		for(j=0;j<lgh->w;j++){
 			// 輝度
-			yc.y = ((long)ycbg.y*((long)LOGO_MAX_DP-lgp->dp_y) + (long)lgp->y*lgp->dp_y) / LOGO_MAX_DP;
+			yc.y = ((long)ycbg->y*((long)LOGO_MAX_DP-lgp->dp_y) + (long)lgp->y*lgp->dp_y) / LOGO_MAX_DP;
 			// 色差(青)
-			yc.cb = ((long)ycbg.cb*((long)LOGO_MAX_DP-lgp->dp_cb) + (long)lgp->cb*lgp->dp_cb) / LOGO_MAX_DP;
+			yc.cb = ((long)ycbg->cb*((long)LOGO_MAX_DP-lgp->dp_cb) + (long)lgp->cb*lgp->dp_cb) / LOGO_MAX_DP;
 			// 色差(赤)
-			yc.cr = ((long)ycbg.cr*((long)LOGO_MAX_DP-lgp->dp_cr) + (long)lgp->cr*lgp->dp_cb) / LOGO_MAX_DP;
+			yc.cr = ((long)ycbg->cr*((long)LOGO_MAX_DP-lgp->dp_cr) + (long)lgp->cr*lgp->dp_cb) / LOGO_MAX_DP;
 
 			// YCbCr -> RGB
 			dlgfp->exfunc->yc2rgb(&pix[bmi.bmiHeader.biWidth*(lgh->h-1-i)+j],&yc,1);
@@ -315,4 +319,45 @@ static void SendLogoData(HWND hdlg)
 	lstrcpy((char*)logodata,defname);
 
 	SendMessage(delogofp->hwnd,WM_SEND_LOGO_DATA,(WPARAM)logodata,0);
+}
+
+/*--------------------------------------------------------------------
+* 	get_bgyc()	プレビュー背景色を取得
+*-------------------------------------------------------------------*/
+static PIXEL_YC* get_bgyc(HWND hdlg)
+{
+	static PIXEL_YC bgyc;
+	BOOL  trans;
+	int   t;
+	PIXEL p;
+
+	// RGB値取得
+	t = GetDlgItemInt(hdlg,IDC_BLUE,&trans,FALSE);
+	if(trans==FALSE) p.b = 0;
+	else if(t > 255) p.b = 255;
+	else if(t < 0)   p.b = 0;
+	else  p.b = t;
+	if(t != p.b)
+		SetDlgItemInt(hdlg,IDC_BLUE ,p.b,FALSE);
+
+	t = GetDlgItemInt(hdlg,IDC_GREEN,&trans,FALSE);
+	if(trans==FALSE) p.g = 0;
+	else if(t > 255) p.g = 255;
+	else if(t < 0)   p.g = 0;
+	else  p.g = t;
+	if(t != p.g)
+		SetDlgItemInt(hdlg,IDC_GREEN,p.g,FALSE);
+
+	t = GetDlgItemInt(hdlg,IDC_RED,&trans,FALSE);
+	if(trans==FALSE) p.r = 0;
+	else if(t > 255) p.r = 255;
+	else if(t < 0)   p.r = 0;
+	else  p.r = t;
+	if(t != p.r)
+		SetDlgItemInt(hdlg,IDC_RED  ,p.r,FALSE);
+
+	// RGB -> YCbCr
+	dlgfp->exfunc->rgb2yc(&bgyc,&p,1);
+
+	return &bgyc;
 }
