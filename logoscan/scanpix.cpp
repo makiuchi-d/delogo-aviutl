@@ -2,6 +2,10 @@
 * 	class ScanPixel
 * 	各ピクセルのロゴ色・不透明度解析用クラス
 * 
+* 		operator new[](size_t,T* p) を使いすぎると落ちる。
+* 		ScanPixel::Allocを最初に使うことで回避できる。(2003/05/10)
+* 
+* 								(最終更新：2003/05/10)
 *********************************************************************/
 #include <windows.h>
 #include "..\\filter.h"
@@ -101,6 +105,32 @@ ScanPixel::~ScanPixel()
 }
 
 /*====================================================================
+* 	Alloc()
+* 		あらかじめフレーム分だけメモリ確保
+* 		すでにある領域はクリアされる
+*===================================================================*/
+int ScanPixel::Alloc(unsigned int f)
+{
+	ScanPixel::~ScanPixel();
+
+	bufsize = f;
+
+	lst_y    = new short[f];
+	lst_cb   = new short[f];
+	lst_cr   = new short[f];
+	lst_bgy  = new short[f];
+	lst_bgcb = new short[f];
+	lst_bgcr = new short[f];
+
+		// メモリ確保失敗
+	if(lst_y==NULL || lst_cb==NULL || lst_cr==NULL ||
+		lst_bgy==NULL || lst_bgcb==NULL || lst_bgcr==NULL)
+			throw CANNOT_MALLOC;
+
+	return f;
+}
+
+/*====================================================================
 * 	AddSample()
 * 		サンプルをバッファに加える
 *===================================================================*/
@@ -151,7 +181,7 @@ int ScanPixel::AddSample(PIXEL& rgb,PIXEL& rgb_bg)
 * 		サンプルを書き換える
 *===================================================================*/
 // YCbCr用
-int ScanPixel::EditSample(int num,PIXEL_YC& ycp,PIXEL_YC& ycp_bg)
+int ScanPixel::EditSample(unsigned int num,PIXEL_YC& ycp,PIXEL_YC& ycp_bg)
 {
 	if(num>=n)	// num番目の要素が存在しない時
 		return AddSample(ycp,ycp_bg);
@@ -169,7 +199,7 @@ int ScanPixel::EditSample(int num,PIXEL_YC& ycp,PIXEL_YC& ycp_bg)
 
 //--------------------------------------------------------------------
 // RGB用
-int ScanPixel::EditSample(int num,PIXEL& rgb,PIXEL rgb_bg)
+int ScanPixel::EditSample(unsigned int num,PIXEL& rgb,PIXEL rgb_bg)
 {
 	PIXEL_YC ycp,ycp_bg;
 
@@ -184,9 +214,11 @@ int ScanPixel::EditSample(int num,PIXEL& rgb,PIXEL rgb_bg)
 * 	DeleteSample()
 * 		サンプルを削除する
 *===================================================================*/
-int ScanPixel::DeleteSample(int num)
+int ScanPixel::DeleteSample(unsigned int num)
 {
-	if(--n<=0)	// サンプルが０以下になるとき
+	n--;
+
+	if(n<=0)	// サンプルが０以下になるとき
 		return ClearSample();
 
 	if(n==num)	// 最後のサンプルを削除する時
@@ -209,6 +241,8 @@ int ScanPixel::DeleteSample(int num)
 *===================================================================*/
 int ScanPixel::ClearSample(void)
 {
+	ScanPixel::~ScanPixel();
+
 	bufsize = 32;
 	lst_y    = new (lst_y)    short[bufsize];
 	lst_cb   = new (lst_cb)   short[bufsize];

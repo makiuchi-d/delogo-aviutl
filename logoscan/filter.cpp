@@ -1,7 +1,7 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver.0
+* 	ロゴ解析プラグイン		ver.β02
 * 
-* [2003]
+* 2003
 * 	04/06:	とりあえず完成。
 * 	04/07:	バッファオーバーフロー回避
 * 	04/09:	newとかmallocしたとたんに落ちるのはなぜ？
@@ -10,14 +10,24 @@
 * 			メディアン化してから平均を取るようにした。
 * 			回帰直線の取得アルゴリズムを少し変更。
 * 	04/27:	ロゴ範囲最大値の変更（幅･高さに１ずつ余裕を持たせた）
+* 	04/28:	解析結果ダイアログ表示中にAviUtlを終了できないように変更
+* 			（エラーを出して落ちるバグ回避）
+* 
+* [β版公開]
+* 
+* 	05/10:	ロゴ範囲の最大値を約４倍にした。(logo.h)
+* 			背景値計算を変更（ソートして真中らへんだけ平均）
+* 			解析が255フレームを超えると落ちるバグ修正		(β02)
 * 
 *********************************************************************/
 /*	TODO:
 * 
 * 	MEMO:
 * 	・背景値計算改善：メディアン化してから平均とか
+* 	・背景値計算改善策②：ソートして真中らへんだけで計算とか
 */
 #include <windows.h>
+#include <stdlib.h>
 #include "..\\filter.h"
 #include "..\\logo.h"
 #include "scanpix.h"
@@ -49,14 +59,14 @@ void ScanLogoData(FILTER* fp,void* editp);
 void SetScanPixel(FILTER* fp,ScanPixel*& sp,int,int,int,void*);
 void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h);
 void CreateLogoData(FILTER* fp,ScanPixel*& sp);
-void yc_median(PIXEL_YC* yc,int n);
-PIXEL_YC yc_average(PIXEL_YC* yc,int n);
+int comp_short(const void* x,const void* y);
+static short med_average(short* s,int n);
 
 //----------------------------
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver.β01 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver.β02 by MakKi";
 
 #define track_N 4
 #if track_N
@@ -195,18 +205,6 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 	switch(message){
 		case WM_FILTER_INIT:	// 初期化
 			create_dlgitem(hwnd,fp->dll_hinst);
-			break;
-
-		case WM_FILTER_EXIT:
-			break;
-
-		case WM_FILTER_FILE_OPEN:
-			break;
-
-		case WM_FILTER_FILE_CLOSE:
-			break;
-
-		case WM_FILTER_CHANGE_ACTIVE:	// フィルタの有効/無効が変更された直後に送られます
 			break;
 
 		case WM_FILTER_CHANGE_PARAM:
@@ -349,6 +347,8 @@ inline void SetRange(FILTER* fp,void* editp)
 *-------------------------------------------------------------------*/
 void ScanLogoData(FILTER* fp,void* editp)
 {
+	EnableWindow(scanbtn,FALSE);	// 解析ボタン無効化
+
 	int frame_n,w,h;	// フレーム数,幅,高さ
 	int frame;	// 現在の表示フレーム
 
@@ -394,6 +394,7 @@ void ScanLogoData(FILTER* fp,void* editp)
 		sp=NULL;
 		if(logodata) delete[] logodata;
 		logodata=NULL;
+		EnableWindow(scanbtn,TRUE);	// ボタンを有効に戻す
 		return;
 	}
 
@@ -409,12 +410,14 @@ void ScanLogoData(FILTER* fp,void* editp)
 
 	// 解析結果ダイアログ
 	dlgfp = fp;
-	DialogBox(fp->dll_hinst,"RESULT_DLG",fp->hwnd,ResultDlgProc);
+	DialogBox(fp->dll_hinst,"RESULT_DLG",GetWindow(fp->hwnd,GW_OWNER),ResultDlgProc);
 
 	if(logodata){
 		delete[] logodata;
 		logodata=NULL;
 	}
+
+	EnableWindow(scanbtn,TRUE);	// ボタンを有効に戻す
 }
 
 /*--------------------------------------------------------------------
@@ -438,6 +441,9 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
 		throw "メモリが確保できませんでした";
 
 	char wndtitle[128];
+
+	for(int i=0;i<xywh.w*xywh.h;i++)
+		sp[i].Alloc(frame_n);
 
 	// 各フレーム処理
 	for(int n=0;n<frame_n;n++){
@@ -471,44 +477,61 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int frame_n,void* editp)
 *-------------------------------------------------------------------*/
 void Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int h)
 {
-	PIXEL_YC* yc;	// 背景色配列
+	short* y;	// 背景色配列
+	short* cb;
+	short* cr;
 	int i,n;
 
 	n = 0;
 
-	// （幅＋高さ＋２）＊２
-	yc = new PIXEL_YC[(xywh.w+xywh.h+2)*2];
+	// (幅+高さ+2)*2
+	y  = new short[(xywh.w+xywh.h+2)*2];
+	cb = new short[(xywh.w+xywh.h+2)*2];
+	cr = new short[(xywh.w+xywh.h+2)*2];
 
 	pix += xywh.x-1 + (xywh.y-1)*h;	// X-1,Y-1に移動
 
 	// 横線（上）合計
 	for(i=0;i<=xywh.w+1;i++){
-		yc[n++] = *pix;
+		y[n]  = pix->y;
+		cb[n] = pix->cb;
+		cr[n] = pix->cr;
+		n++;
 		pix++;
 	}
 	pix += w - i;	// 次の行へ
 	// 縦線
 	for(i=2;i<=xywh.h+1;i++){
 		// 左線
-		yc[n++] = *pix;
+		y[n]  = pix->y;
+		cb[n] = pix->cb;
+		cr[n] = pix->cr;
+		n++;
 		// 右線
-		yc[n++] = pix[xywh.w+1];
+		y[n]  = pix[xywh.w+1].y;
+		cb[n] = pix[xywh.w+1].cb;
+		cr[n] = pix[xywh.w+1].cr;
+		n++;
 
 		pix += w;	// 次の行へ
 	}
 	// 横線（下）合計
 	for(i=0;i<=xywh.w+1;i++){
-		yc[n++] = *pix;
+		y[n]  = pix->y;
+		cb[n] = pix->cb;
+		cr[n] = pix->cr;
+		n++;
 		pix++;
 	}
 
-	// メディアン
-	yc_median(yc,n);
+	// ソートして真中らへんを平均
+	r.y  = med_average(y,n);
+	r.cb = med_average(cb,n);
+	r.cr = med_average(cr,n);
 
-	// 平均値
-	r = yc_average(yc,n);
-
-	delete[] yc;
+	delete[] y;
+	delete[] cb;
+	delete[] cr;
 }
 
 /*--------------------------------------------------------------------
@@ -537,72 +560,31 @@ void CreateLogoData(FILTER* fp,ScanPixel*& sp)
 }
 
 /*--------------------------------------------------------------------
-*	メディアン関数
+*	short型比較関数（qsort用）
 *-------------------------------------------------------------------*/
-// 中央値
-inline short median(short& s1,short& s2,short& s3)
+int comp_short(const void* x,const void* y)
 {
-	if(s1<s2){	// s1<s2
-
-		if(s2<s3) return s2;	// s1<s2<s3
-		else	// s1<s2 && s3<s2
-			return ((s1<s3)? s3:s1);	// 大きい方
-	}
-	else{	// s2<s1
-		if(s1<s3) return s1;	// s2<s1<s3;
-		else	// s2<s1 && s3<s1
-			return ((s2<s3)? s3:s2);
-	}
+	return ((int)*(const short*)x - *(const short*)y);
 }
-
-// yc_median()
-void yc_median(PIXEL_YC* yc,int n)
-{
-	if(n<3) return;
-
-	PIXEL_YC* temp = new PIXEL_YC[n];
-	if(temp==NULL)
-		throw "メモリ確保できませんでした";
-
-	temp[0].y  = median(yc[n-1].y,yc[0].y,yc[1].y);
-	temp[0].cb = median(yc[n-1].cb,yc[0].cb,yc[1].cb);
-	temp[0].cr = median(yc[n-1].cr,yc[0].cr,yc[1].cr);
-
-	for(int i=1;i<n-1;i++){
-		temp[i].y  = median(yc[i-1].y,yc[i].y,yc[i+1].y);
-		temp[i].cb = median(yc[i-1].cb,yc[i].cb,yc[i+1].cb);
-		temp[i].cr = median(yc[i-1].cr,yc[i].cr,yc[i+1].cr);
-	}
-
-	temp[n-1].y  = median(yc[n-2].y,yc[n-1].y,yc[0].y);
-	temp[n-1].cb = median(yc[n-2].cb,yc[n-1].cb,yc[0].cb);
-	temp[n-1].cr = median(yc[n-2].cr,yc[n-1].cr,yc[0].cr);
-
-	memcpy(yc,temp,n*sizeof(PIXEL_YC));
-	delete[] temp;
-}
-
 
 /*--------------------------------------------------------------------
-*	ＹＣ平均関数
+*	ソートして真中らへんを平均
 *-------------------------------------------------------------------*/
-PIXEL_YC yc_average(PIXEL_YC* yc,int n)
+static short med_average(short* s,int n)
 {
-	double y,cb,cr;
+	double t  =0.0;
+	int    nn =0;
 
-	y = cb = cr = 0.0;
+	// ソートする
+	qsort(s,n,sizeof(short),comp_short);
 
-	for(int i=0;i<n;i++){
-		y  += yc[i].y;
-		cb += yc[i].cb;
-		cr += yc[i].cr;
-	}
+	// 真中らへんを平均
+	for(int i=n/3;i<n-(n/3);i++,nn++)
+		t += s[i];
 
-	PIXEL_YC r;
+	t = t / nn + 0.5;
 
-	r.y  = y / n +0.5;
-	r.cb = cb/ n +0.5;
-	r.cr = cr/ n +0.5;
-
-	return r;
+	return ((short)t);
 }
+
+//*/

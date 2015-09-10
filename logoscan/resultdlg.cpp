@@ -1,5 +1,6 @@
 /*====================================================================
 * 	解析結果ダイアログ			resultdlg.cpp
+* 								最終更新：2003/05/10
 *===================================================================*/
 #include <windows.h>
 #include "..\filter.h"
@@ -10,7 +11,7 @@
 #include "xywh.h"
 
 
-#define LGD_FILTER  "ロゴデータ (*.lgd)\0*.lgd\0全てのファイル (*.*)\0*.*\0"
+#define LGD_FILTER  "ロゴデータファイル (*.lgd)\0*.lgd\0全てのファイル (*.*)\0*.*\0"
 #define LGD_DEFAULT "*.lgd"
 
 
@@ -109,6 +110,7 @@ static void Wm_initdialog(HWND hdlg)
 	pix = NULL;
 
 	// ロゴ消しフィルタを探す
+	delogofp = NULL;
 	for(int n=0;(delogofp=(FILTER*)dlgfp->exfunc->get_filterp(n))!=NULL;n++){
 		if(lstrcmp(delogofp->name,LOGO_FILTER_NAME)==0){	// 名前で判別
 			// ロゴ消しフィルタが見つかった

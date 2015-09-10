@@ -36,9 +36,10 @@
 * [正式版(0.01)公開]
 * 
 * 	05/04:	不透明度調整の方法を変更。
-* 	05/08:	メモリ関連ルーチン変更		(0.02)
-* 				VFAPI動作に対応、プロファイルの途中切り替えに対応
-* 				ロゴデータのサイズを約４倍にした。
+* 	05/08:	メモリ関連ルーチン大幅変更		(0.02)
+* 			VFAPI動作に対応、プロファイルの途中切り替えに対応
+* 			ロゴデータのサイズを約４倍にした。
+* 	05/10:	データが受信できなくなっていたバグを修正	(0.03)
 * 
 *********************************************************************/
 
@@ -112,6 +113,9 @@ unsigned int  logodata_n = 0;
 
 char ex_data[LOGO_MAX_NAME];	// 拡張データ領域
 
+static UINT  WM_SEND_LOGO_DATA;	// ロゴ受信メッセージ
+
+
 //----------------------------
 //	プロトタイプ宣言
 //----------------------------
@@ -137,7 +141,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.02 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.03 by MakKi";
 #define track_N 6
 #if track_N
 TCHAR *track_name[]   = { "位置 X", "位置 Y", "深度", "Y", "Cb", "Cr" };	// トラックバーの名前
@@ -268,10 +272,13 @@ BOOL func_exit( FILTER *fp )
 	// ロゴデータ開放
 	if(logodata){
 		for(i=0;i<logodata_n;i++){
-			if(logodata[i])
+			if(logodata[i]){
 				free(logodata[i]);
+				logodata[i] = NULL;
+			}
 		}
 		free(logodata);
+		logodata = NULL;
 	}
 
 	return TRUE;
@@ -444,8 +451,6 @@ static int  find_logo(const char *logo_name)
 *===================================================================*/
 BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, void *editp, FILTER *fp )
 {
-	static UINT  WM_SEND_LOGO_DATA;
-
 	if(message==WM_SEND_LOGO_DATA){	// ロゴデータ受信
 		set_sended_data((void *)wParam,fp);
 		return TRUE;
@@ -904,7 +909,7 @@ static void del_combo_item(int num)
 	unsigned int i;
 
 	ptr = (void *)SendMessage(dialog.cb_logo,CB_GETITEMDATA,num,0);
-	if(ptr) free(ptr);
+	if(ptr){ free(ptr);	ptr = NULL; }
 
 	// ロゴデータ配列再構成
 	logodata_n = SendMessage(dialog.cb_logo,CB_GETCOUNT,0,0);

@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////
-// 	解析結果ダイアログリソース			resultdlg.rc
+// 	ロゴ解析プラグイン リソース			logoscan.rc
 //	Resource Script
 //////////////////////////////////////////////////////////////////////
 
@@ -7,12 +7,12 @@
 #include "resource.h"
 
 //////////////////////////////////////////////////////////////////////
-// Dialog
+// 解析結果ダイアログ
 //
 
 RESULT_DLG DIALOG  0,0, 158,121
 STYLE WS_VISIBLE | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_SYSMENU
-CAPTION "解析結果"
+CAPTION "ロゴ解析結果"
 FONT 9, "ＭＳ Ｐゴシック"
 {
 	LTEXT     "ロゴ名", IDC_TEXT, 8,10,20,9
@@ -34,4 +34,37 @@ FONT 9, "ＭＳ Ｐゴシック"
 	GROUPBOX    "",       IDC_PANEL, 8,25,100,60,WS_VISIBLE
 
 }
+
+//////////////////////////////////////////////////////////////////////
+//  VERSION INFO
+//
+VS_VIRSION_INFO VERSIONINFO
+ FILEVERSION    0,0,0,2
+ PRODUCTVERSION 0,0,0
+ FILEFLAGSMASK  0x3FL
+ FILEFLAGS      0x0L
+ FILEOS         VOS__WINDOWS32
+ FILETYPE       VFT_DLL
+ FILESUBTYPE    0x0L
+{
+    BLOCK "StringFileInfo"
+	{
+        BLOCK "041103A4"
+		{
+			VALUE "Comments",         "beta version\0"
+            VALUE "FileDescription",  "ロゴ解析 Plugin for AviUtl 0.98d\0"
+            VALUE "FileVersion",      "β02\0"
+            VALUE "InternalName",     "LogoScan\0"
+            VALUE "LegalCopyright",   "(C) MakKi\0"
+            VALUE "OriginalFilename", "logoscan.aup\0"
+            VALUE "ProductName",      "ロゴ解析 プラグイン\0"
+            VALUE "ProductVersion",   "β02\0"
+		}
+	}
+    BLOCK "VarFileInfo"
+    {
+        VALUE "Translation", 0x411, 932
+    }
+}
+
 
