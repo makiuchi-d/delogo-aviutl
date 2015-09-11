@@ -7,6 +7,7 @@
 #include <windows.h>
 #include "..\filter.h"
 #include "scanpix.h"
+#include <stdio.h>
 
 
 // 独自ウィンドウメッセージ
@@ -26,6 +27,8 @@ struct AbortDlgParam {
 	int         x,y,w,h,t;
 	void**      data;
 	const char* errstr;
+	int         mark;
+	FILE*       list;
 };
 
 #endif

@@ -3,6 +3,7 @@
 * 
 * 2003
 * 	06/18:	背景色の指定をRGBに変更
+* 	10/18:	VirtualAllocをやめてみた（SSE2対策)
 * 
 *===================================================================*/
 #include <windows.h>
@@ -60,7 +61,7 @@ BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 			switch(LOWORD(wParam)){
 				case IDCANCEL:
 				case IDC_CLOSE:	// 閉じるボタン
-					if(pix) VirtualFree(pix,0,MEM_RELEASE);
+					if(pix) free(pix);	// VirtualFree(pix,0,MEM_RELEASE);
 					pix = NULL;
 					EndDialog(hdlg,LOWORD(wParam));
 					break;
@@ -155,7 +156,8 @@ static void DispLogo(HWND hdlg)
 	bmi.bmiHeader.biCompression = BI_RGB;
 
 	// メモリ再確保
-	pix = VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_COMMIT,PAGE_READWRITE);
+	// pix = VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_COMMIT,PAGE_READWRITE);
+	pix = realloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL));
 	if(pix==NULL){
 		MessageBox(hdlg,"メモリが確保できませんでした\nDispLogo()",filter_name,MB_OK|MB_ICONERROR);
 		return;	// 何もしない

@@ -105,6 +105,17 @@ BOOL CALLBACK AbortDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
 						// 単一背景のときサンプルをセットする
 						useable++;
 						SendMessage(p->fp->hwnd,WM_SP_DRAWFRAME,0,p->s+examine);
+
+						if(p->mark){	// 有効フレームをマーク
+							FRAME_STATUS fs;
+							p->fp->exfunc->get_frame_status(p->editp,p->s+examine,&fs);
+							fs.edit_flag |= EDIT_FRAME_EDIT_FLAG_MARKFRAME;
+							p->fp->exfunc->set_frame_status(p->editp,p->s+examine,&fs);
+						}
+						if(p->list){
+							fprintf(p->list,"%d\n",p->s+examine+1);
+						}
+
 						// ロゴサンプルセット
 						for(int i=0;i<xywh.h;i++){
 							for(int j=0;j<xywh.w;j++){

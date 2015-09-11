@@ -1,5 +1,5 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver 0.05
+* 	ロゴ解析プラグイン		ver 0.06
 * 
 * 2003
 * 	04/06:	とりあえず完成。
@@ -35,6 +35,9 @@
 * 			細かな修正、解析完了時にビープを鳴らすようにした。
 * 	09/22:	キャッシュの幅と高さを８の倍数にした。(SSE2対策になったかな?)
 * 	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.05)
+* 	10/14:	キャッシュ幅･高さを元に戻した。
+* 	10/18:	有効フレームをマーク･ログファイル出力できるようにした。
+* 			VirtualAllocをやめてmallocを使うようにした。(0.06)
 * 
 *********************************************************************/
 /*	TODO:
@@ -48,6 +51,7 @@
 * 		→最大と最小の差が閾値以上のとき単一でないと判断のほうがよさそう。
 * 
 * 	・SSE2処理時に落ちる：get_ycp_filtering_cache_exがぁゃιぃ。とりあえず幅高さを８の倍数に。
+* 		→だめぽ。VirtualAllocかなぁ。とりあえず試してみる。
 * 
 */
 #include <windows.h>
@@ -70,6 +74,9 @@ static short _x,_y,_w,_h,_thy;
 
 void *logodata = NULL;	// ロゴデータ（解析結果）
 
+#define LIST_FILTER  "フレームリスト (*.txt)\0*.txt\0"\
+                     "全てのファイル (*.*)\0*.*\0"
+
 //----------------------------
 //	プロトタイプ宣言
 //----------------------------
@@ -78,13 +85,13 @@ inline void SetXYWH(FILTER* fp,void* editp);
 inline void SetRange(FILTER* fp,void* editp);
 inline void FixXYWH(FILTER* fp,void* editp);
 void ScanLogoData(FILTER* fp,void* editp);
-void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*);
+void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*,char*);
 
 //----------------------------
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver 0.05 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.06 by MakKi";
 
 #define track_N 5
 #if track_N
@@ -94,10 +101,10 @@ int   track_s[]       = { 1, 1, 1, 1,   0 };	// トラックバーの下限値
 int   track_e[]       = { 1, 1, 1, 1, 255 };	// トラックバーの上限値
 #endif
 
-#define check_N 0
+#define check_N 2
 #if check_N
-TCHAR *check_name[]   = { 0 };	// チェックボックス
-int   check_default[] = { 0 };	// デフォルト
+TCHAR *check_name[]   = { "有効フレームをマーク", "有効フレームリストを保存" };	// チェックボックス
+int   check_default[] = { 0,0 };	// デフォルト
 #endif
 
 #define tLOGOX   0
@@ -105,14 +112,16 @@ int   check_default[] = { 0 };	// デフォルト
 #define tLOGOW   2
 #define tLOGOH   3
 #define tTHY     4
+#define cMARK    0
+#define cLIST    1
 
 // 設定ウィンドウの高さ
 #define WND_Y (60+24*track_N+20*check_N)
 
 
 FILTER_DLL filter = {
-	FILTER_FLAG_WINDOW_SIZE |			// 設定ウィンドウのサイズを指定出来るようにします
-	FILTER_FLAG_MAIN_MESSAGE | 	// func_WndProc()にWM_FILTER_MAIN_???のメッセージを送るようにします
+	FILTER_FLAG_WINDOW_SIZE |	// 設定ウィンドウのサイズを指定出来るようにします
+	FILTER_FLAG_MAIN_MESSAGE |	// func_WndProc()にWM_FILTER_MAIN_???のメッセージを送るようにします
 	FILTER_FLAG_EX_INFORMATION,
 #ifdef WND_Y
 	320,WND_Y,			// 設定ウインドウのサイズ
@@ -229,8 +238,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 				FixXYWH(fp,editp);
 				return TRUE;
 			}
-			else
-				SetRange(fp,editp);
+			SetRange(fp,editp);
 			return FALSE;
 
 		//--------------------------------------------マウスメッセージ
@@ -402,6 +410,7 @@ void ScanLogoData(FILTER* fp,void* editp)
 	int w,h;		// 幅,高さ
 	int start,end;	// 選択開始・終了フレーム
 	int frame;		// 現在の表示フレーム
+	char list[MAX_PATH] = "\0";	// フレームリストファイル名
 
 	ScanPixel*  sp = NULL;
 	LOGO_HEADER lgh;
@@ -434,12 +443,14 @@ void ScanLogoData(FILTER* fp,void* editp)
 		wsprintf(defname,"%s %dx%d",defname,w,h);	// デフォルトロゴ名作成
 
 		// キャッシュサイズ設定
-		w += w % 8;
-		h += h % 8;
 		fp->exfunc->set_ycp_filtering_cache_size(fp,w,h,1,NULL);
 
+		if(fp->check[cLIST]){	// リスト保存時ファイル名取得
+			fp->exfunc->dlg_get_save_name(list,LIST_FILTER,"*.txt");
+		}
+
 		// ScanPixelを設定する+解析・ロゴデータ作成
-		SetScanPixel(fp,sp,w,h,start,end,editp);
+		SetScanPixel(fp,sp,w,h,start,end,editp,list);
 	}
 	catch(const char* str){
 		MessageBox(fp->hwnd,str,filter_name,MB_OK|MB_ICONERROR);
@@ -476,7 +487,7 @@ void ScanLogoData(FILTER* fp,void* editp)
 /*--------------------------------------------------------------------
 *	ScanPixelを設定する
 *-------------------------------------------------------------------*/
-void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp)
+void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp,char* list)
 {
 	// 範囲チェック
 	if(fp->track[tLOGOW]<=0 || fp->track[tLOGOH]<=0)
@@ -507,8 +518,18 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp)
 	param.t      = fp->track[tTHY];
 	param.data   = &logodata;
 	param.errstr = NULL;
+	param.mark   = fp->check[cMARK];
+
+	param.list = fopen(list,"w");
+	if(param.list==NULL){
+		throw "フレームリストファイルの作成に失敗しました";
+	}
+	fprintf(param.list,"<Frame List>\n");
 
 	DialogBoxParam(fp->dll_hinst,"ABORT_DLG",GetWindow(fp->hwnd,GW_OWNER),AbortDlgProc,(LPARAM)&param);
+
+	if(param.list) fclose(param.list);
+	param.list = NULL;
 
 	if(param.errstr)
 		throw param.errstr;
