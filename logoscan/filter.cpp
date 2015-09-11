@@ -38,6 +38,10 @@
 * 	10/14:	キャッシュ幅･高さを元に戻した。
 * 	10/18:	有効フレームをマーク･ログファイル出力できるようにした。
 * 			VirtualAllocをやめてmallocを使うようにした。(0.06)
+* 	10/20:	VirtualAllocにもどした。
+* 			exfunc->rgb2ycをやめて、自前でRGB->YCbCr
+* 			有効フレームリストを保存のチェックが入っていない時動かないバグ修正
+* 			ログファイルのデフォルト名をソースファイル名からつくるようにした。(0.06a)
 * 
 *********************************************************************/
 /*	TODO:
@@ -52,6 +56,8 @@
 * 
 * 	・SSE2処理時に落ちる：get_ycp_filtering_cache_exがぁゃιぃ。とりあえず幅高さを８の倍数に。
 * 		→だめぽ。VirtualAllocかなぁ。とりあえず試してみる。
+* 		AviUtl本家の掲示板にrgb2ycが動かないとの報告が?!こいつだったのか。
+* 			→自前で変換。
 * 
 */
 #include <windows.h>
@@ -91,7 +97,7 @@ void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*,char*);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver 0.06 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.06a by MakKi";
 
 #define track_N 5
 #if track_N
@@ -446,7 +452,14 @@ void ScanLogoData(FILTER* fp,void* editp)
 		fp->exfunc->set_ycp_filtering_cache_size(fp,w,h,1,NULL);
 
 		if(fp->check[cLIST]){	// リスト保存時ファイル名取得
-			fp->exfunc->dlg_get_save_name(list,LIST_FILTER,"*.txt");
+			// ロゴ名の初期値
+			GetWindowText(GetWindow(fp->hwnd,GW_OWNER),list,MAX_PATH);	// タイトルバー文字列取得
+			for(int i=1;list[i];i++)
+				if(list[i]=='.') list[i] = '\0';	// 2文字目以降の'.'を終端にする（拡張子を削除）
+			wsprintf(list,"%s_scan.txt",list);	// デフォルトロゴ名作成
+
+			if(!fp->exfunc->dlg_get_save_name(list,LIST_FILTER,list))
+				*list = '\0';	// キャンセル時
 		}
 
 		// ScanPixelを設定する+解析・ロゴデータ作成
@@ -520,11 +533,13 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp,
 	param.errstr = NULL;
 	param.mark   = fp->check[cMARK];
 
-	param.list = fopen(list,"w");
-	if(param.list==NULL){
-		throw "フレームリストファイルの作成に失敗しました";
+	if(*list){
+		param.list = fopen(list,"w");
+		if(param.list==NULL){
+			throw "フレームリストファイルの作成に失敗しました";
+		}
+		fprintf(param.list,"<Frame List>\n");
 	}
-	fprintf(param.list,"<Frame List>\n");
 
 	DialogBoxParam(fp->dll_hinst,"ABORT_DLG",GetWindow(fp->hwnd,GW_OWNER),AbortDlgProc,(LPARAM)&param);
 

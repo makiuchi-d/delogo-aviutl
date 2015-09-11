@@ -9,7 +9,7 @@
 #define IDC_DOWN    4108
 #define IDC_PANEL   4109
 #define IDC_GROUP   4110
-#define IDC_BLACK   4111
+//#define IDC_BLACK   4111
 #define IDC_RED     4112
 #define IDC_GREEN   4113
 #define IDC_BLUE    4114

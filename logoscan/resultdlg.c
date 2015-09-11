@@ -41,6 +41,7 @@ static void idc_save(HWND hdlg);
 static void ExportLogoData(char *fname,void *data,HWND hdlg);
 static void SendLogoData(HWND hdlg);
 static PIXEL_YC* get_bgyc(HWND hdlg);
+static void RGBtoYCbCr(PIXEL_YC *ycp,const PIXEL *rgb);
 
 
 /*====================================================================
@@ -61,7 +62,7 @@ BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 			switch(LOWORD(wParam)){
 				case IDCANCEL:
 				case IDC_CLOSE:	// 閉じるボタン
-					if(pix) free(pix);	// VirtualFree(pix,0,MEM_RELEASE);
+					if(pix) VirtualFree(pix,0,MEM_RELEASE);
 					pix = NULL;
 					EndDialog(hdlg,LOWORD(wParam));
 					break;
@@ -156,8 +157,7 @@ static void DispLogo(HWND hdlg)
 	bmi.bmiHeader.biCompression = BI_RGB;
 
 	// メモリ再確保
-	// pix = VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_COMMIT,PAGE_READWRITE);
-	pix = realloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL));
+	pix = VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_COMMIT,PAGE_READWRITE);
 	if(pix==NULL){
 		MessageBox(hdlg,"メモリが確保できませんでした\nDispLogo()",filter_name,MB_OK|MB_ICONERROR);
 		return;	// 何もしない
@@ -358,7 +358,19 @@ static PIXEL_YC* get_bgyc(HWND hdlg)
 		SetDlgItemInt(hdlg,IDC_RED  ,p.r,FALSE);
 
 	// RGB -> YCbCr
-	dlgfp->exfunc->rgb2yc(&bgyc,&p,1);
+	RGBtoYCbCr(&bgyc,&p);
 
 	return &bgyc;
 }
+
+/*--------------------------------------------------------------------
+* 	RGBtoYCbCr()
+*-------------------------------------------------------------------*/
+static void RGBtoYCbCr(PIXEL_YC *ycp,const PIXEL *rgb)
+{
+	ycp->y  =  0.2989*4096/256*rgb->r + 0.5866*4096/256*rgb->g + 0.1145*4096/256*rgb->b +0.5;
+	ycp->cb = -0.1687*4096/256*rgb->r - 0.3312*4096/256*rgb->g + 0.5000*4096/256*rgb->b +0.5;
+	ycp->cr =  0.5000*4096/256*rgb->r - 0.4183*4096/256*rgb->g - 0.0816*4096/256*rgb->b +0.5;
+}
+
+

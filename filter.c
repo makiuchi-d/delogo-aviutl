@@ -49,10 +49,12 @@
 * 			ロゴ名編集で同名にせっていできないようにした。(0.06a)
 * 	08/01:	フェードの不透明度計算式を見直し
 * 	08/02:	実数演算を止め、無駄な演算を削除して高速化。
-*			上に伴い深度のデフォルト値を変更。
-*			細かな修正
-*	09/05:	細かな修正
-*	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.07)
+* 			上に伴い深度のデフォルト値を変更。
+* 			細かな修正
+* 	09/05:	細かな修正
+* 	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.07)
+* 	10/20:	SSE2使用のrgb2ycがバグもちなので、自前でRGB->YCbCrするようにした。
+* 			位置X/Yの最大･最小値を拡張した。(0.07a)
 * 
 *********************************************************************/
 
@@ -156,15 +158,15 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.07 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.07a by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
 							"深度", "Y", "Cb", "Cr", 
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
 int   track_default[] = {    0,    0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
-int   track_s[]       = { -200, -200,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = {  200,  200, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
+int   track_s[]       = { -500, -500,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
+int   track_e[]       = {  500,  500, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N

@@ -37,6 +37,7 @@ static void CopyLBtoCB(HWND list,HWND combo);
 static void CopyCBtoLB(HWND combo,HWND list);
 static void DispLogo(HWND hdlg);
 static void set_bgyc(HWND hdlg);
+static void RGBtoYCbCr(PIXEL_YC *ycp,const PIXEL *rgb);
 
 
 //----------------------------
@@ -49,10 +50,10 @@ PIXEL  *pix;		// 表示用ピクセル
 PIXEL_YC bgyc; // 背景色
 
 const PIXEL_YC yc_black = {    0,    0,    0 };	// 黒
-const PIXEL_YC yc_white = { 4080,    0,    0 };	// 白
-const PIXEL_YC yc_red   = { 1220, -688, 2040 };	// 赤
-const PIXEL_YC yc_green = { 2393,-1351,-1707 };	// 緑
-const PIXEL_YC yc_blue  = {  467, 2040, -333 };	// 青
+//const PIXEL_YC yc_white = { 4080,    0,    0 };	// 白
+//const PIXEL_YC yc_red   = { 1220, -688, 2040 };	// 赤
+//const PIXEL_YC yc_green = { 2393,-1351,-1707 };	// 緑
+//const PIXEL_YC yc_blue  = {  467, 2040, -333 };	// 青
 
 void **add_list;
 void **del_list;
@@ -152,14 +153,6 @@ static void Wm_initdialog(HWND hdlg)
 
 	// コンボボックスからアイテムをコピー
 	CopyCBtoLB(hdlg,hcb_logo);
-
-	// 背景色に黒を選択
-	SendDlgItemMessage(hdlg,IDC_BLACK,BM_SETCHECK,(WPARAM)BST_CHECKED,0);
-	bgyc = yc_black;
-
-	// 一番上のリストアイテムを選択
-	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,0,0);
-
 	// RGBエディット・スピンのレンジ設定
 	SendDlgItemMessage(hdlg,IDC_RED,   EM_SETLIMITTEXT, 3,0);
 	SendDlgItemMessage(hdlg,IDC_GREEN, EM_SETLIMITTEXT, 3,0);
@@ -167,6 +160,17 @@ static void Wm_initdialog(HWND hdlg)
 	SendDlgItemMessage(hdlg,IDC_SPINR, UDM_SETRANGE, 0, 255);
 	SendDlgItemMessage(hdlg,IDC_SPING, UDM_SETRANGE, 0, 255);
 	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 255);
+
+	// 背景色に黒を選択
+//	SendDlgItemMessage(hdlg,IDC_BLACK,BM_SETCHECK,(WPARAM)BST_CHECKED,0);
+	SetDlgItemInt(hdlg,IDC_RED,  0,FALSE);
+	SetDlgItemInt(hdlg,IDC_GREEN,0,FALSE);
+	SetDlgItemInt(hdlg,IDC_BLUE, 0,FALSE);
+	bgyc = yc_black;
+
+	// 一番上のリストアイテムを選択
+	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,0,0);
+
 }
 
 
@@ -765,7 +769,17 @@ static void set_bgyc(HWND hdlg)
 		SetDlgItemInt(hdlg,IDC_RED  ,p.r,FALSE);
 
 	// RGB -> YCbCr
-	optfp->exfunc->rgb2yc(&bgyc,&p,1);
+	RGBtoYCbCr(&bgyc,&p);
+}
+
+/*--------------------------------------------------------------------
+* 	RGBtoYCbCr()
+*-------------------------------------------------------------------*/
+static void RGBtoYCbCr(PIXEL_YC *ycp,const PIXEL *rgb)
+{
+	ycp->y  =  0.2989*4096/256*rgb->r + 0.5866*4096/256*rgb->g + 0.1145*4096/256*rgb->b +0.5;
+	ycp->cb = -0.1687*4096/256*rgb->r - 0.3312*4096/256*rgb->g + 0.5000*4096/256*rgb->b +0.5;
+	ycp->cr =  0.5000*4096/256*rgb->r - 0.4183*4096/256*rgb->g - 0.0816*4096/256*rgb->b +0.5;
 }
 
 //*/
