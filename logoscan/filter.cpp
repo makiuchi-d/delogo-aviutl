@@ -1,5 +1,5 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver.β03a
+* 	ロゴ解析プラグイン		ver 0.05
 * 
 * 2003
 * 	04/06:	とりあえず完成。
@@ -31,6 +31,10 @@
 * 	07/02:	中断できるようにした。
 * 			このために処理の流れを大幅に変更。
 * 	07/03:	プロファイルの変更フレームで無限ループになるバグ回避（0.04)
+* 	08/02:	処理順序の見直しして高速化
+* 			細かな修正、解析完了時にビープを鳴らすようにした。
+* 	09/22:	キャッシュの幅と高さを８の倍数にした。(SSE2対策になったかな?)
+* 	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.05)
 * 
 *********************************************************************/
 /*	TODO:
@@ -42,6 +46,8 @@
 * 
 * 	・背景が単色かどうかの判定：背景値の平均と、最大or最小との差が閾値以上のとき単一でないとするのはどうか
 * 		→最大と最小の差が閾値以上のとき単一でないと判断のほうがよさそう。
+* 
+* 	・SSE2処理時に落ちる：get_ycp_filtering_cache_exがぁゃιぃ。とりあえず幅高さを８の倍数に。
 * 
 */
 #include <windows.h>
@@ -56,11 +62,11 @@
 // ボタン
 #define ID_SCANBTN  40010
 HWND scanbtn;
-AbortDlgParam param;
 
-short dn_x,dn_y;	// マウスダウン座標
-short up_x,up_y;	// アップ座標
-bool  flg_mouse_down = 0;	// マウスダウンフラグ
+static short dn_x,dn_y;	// マウスダウン座標
+static short up_x,up_y;	// アップ座標
+static bool  flg_mouse_down = 0;	// マウスダウンフラグ
+static short _x,_y,_w,_h,_thy;
 
 void *logodata = NULL;	// ロゴデータ（解析結果）
 
@@ -70,6 +76,7 @@ void *logodata = NULL;	// ロゴデータ（解析結果）
 inline void create_dlgitem(HWND hwnd,HINSTANCE hinst);
 inline void SetXYWH(FILTER* fp,void* editp);
 inline void SetRange(FILTER* fp,void* editp);
+inline void FixXYWH(FILTER* fp,void* editp);
 void ScanLogoData(FILTER* fp,void* editp);
 void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*);
 
@@ -77,7 +84,7 @@ void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver 0.04 by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.05 by MakKi";
 
 #define track_N 5
 #if track_N
@@ -209,13 +216,21 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 *===================================================================*/
 BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *editp, FILTER *fp )
 {
+	static bool scanning;
+
 	switch(message){
 		case WM_FILTER_INIT:	// 初期化
 			create_dlgitem(hwnd,fp->dll_hinst);
+			scanning = false;
 			break;
 
 		case WM_FILTER_CHANGE_PARAM:
-			SetRange(fp,editp);
+			if(scanning){
+				FixXYWH(fp,editp);
+				return TRUE;
+			}
+			else
+				SetRange(fp,editp);
 			return FALSE;
 
 		//--------------------------------------------マウスメッセージ
@@ -225,7 +240,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 			dn_x = up_x = (short)LOWORD(lparam);
 			dn_y = up_y = (short)HIWORD(lparam);
 			flg_mouse_down = true;
-			SetXYWH(fp,editp);
+			if(!scanning) SetXYWH(fp,editp);
 			return TRUE;
 
 		case WM_FILTER_MAIN_MOUSE_UP:
@@ -235,7 +250,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 				up_x = (short)LOWORD(lparam);
 				up_y = (short)HIWORD(lparam);
 				flg_mouse_down = false;
-				SetXYWH(fp,editp);
+				if(!scanning) SetXYWH(fp,editp);
 				return TRUE;
 			}
 			break;
@@ -246,7 +261,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 			if(flg_mouse_down){	// マウスが押されている時
 				up_x = (short)LOWORD(lparam);
 				up_y = (short)HIWORD(lparam);
-				SetXYWH(fp,editp);
+				if(!scanning) SetXYWH(fp,editp);
 				return TRUE;
 			}
 			break;
@@ -255,9 +270,9 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, void *
 		case WM_COMMAND:
 			switch(LOWORD(wparam)){
 				case ID_SCANBTN:
-					EnableWindow(hwnd,FALSE);
+					scanning = true;
 					ScanLogoData(fp,editp);
-					EnableWindow(hwnd,TRUE);
+					scanning = false;
 					break;
 			}
 			break;
@@ -292,6 +307,19 @@ inline void create_dlgitem(HWND hwnd,HINSTANCE hinst)
 	SendMessage(scanbtn, WM_SETFONT, (WPARAM)font, 0);
 }
 
+/*--------------------------------------------------------------------
+*	設定ウィンドウの各値を固定する
+*-------------------------------------------------------------------*/
+inline void FixXYWH(FILTER* fp,void* editp)
+{
+	fp->track[tLOGOX] = _x;
+	fp->track[tLOGOY] = _y;
+	fp->track[tLOGOW] = _w;
+	fp->track[tLOGOH] = _h;
+	fp->track[tTHY]   = _thy;
+
+	fp->exfunc->filter_window_update(fp);	// 更新
+}
 
 /*--------------------------------------------------------------------
 *	設定ウィンドウの各値を設定する
@@ -325,6 +353,10 @@ inline void SetXYWH(FILTER* fp,void* editp)
 	fp->track[tLOGOW]   = ((dn_x<up_x)?up_x:dn_x) - fp->track[tLOGOX];
 	fp->track[tLOGOH]   = ((dn_y<up_y)?up_y:dn_y) - fp->track[tLOGOY];
 
+	_x = fp->track[tLOGOX]; _y = fp->track[tLOGOY];
+	_w = fp->track[tLOGOW]; _h = fp->track[tLOGOH];
+	_thy = fp->track[tTHY];
+
 	fp->exfunc->filter_window_update(fp);	// 更新
 }
 
@@ -352,6 +384,10 @@ inline void SetRange(FILTER* fp,void* editp)
 		fp->track[tLOGOW] = fp->track_e[tLOGOW];
 	if(fp->track_e[tLOGOH] < fp->track[tLOGOH])
 		fp->track[tLOGOH] = fp->track_e[tLOGOH];
+
+	_x = fp->track[tLOGOX]; _y = fp->track[tLOGOY];
+	_w = fp->track[tLOGOW]; _h = fp->track[tLOGOH];
+	_thy = fp->track[tTHY];
 
 	fp->exfunc->filter_window_update(fp);	// 更新
 }
@@ -391,14 +427,16 @@ void ScanLogoData(FILTER* fp,void* editp)
 		if(!fp->exfunc->get_frame_size(editp,&w,&h))
 			throw "画像サイズ取得できませんでした";
 
-		// キャッシュサイズ設定
-		fp->exfunc->set_ycp_filtering_cache_size(fp,w,h,1,NULL);
-
 		// ロゴ名の初期値
 		GetWindowText(GetWindow(fp->hwnd,GW_OWNER),defname,LOGO_MAX_NAME-9);	// タイトルバー文字列取得
 		for(int i=1;i<LOGO_MAX_NAME-9;i++)
-			if(defname[i]=='.') defname[i] = '\0';	// 2文字目以降の'.'を終端にする
+			if(defname[i]=='.') defname[i] = '\0';	// 2文字目以降の'.'を終端にする（.aviを削除）
 		wsprintf(defname,"%s %dx%d",defname,w,h);	// デフォルトロゴ名作成
+
+		// キャッシュサイズ設定
+		w += w % 8;
+		h += h % 8;
+		fp->exfunc->set_ycp_filtering_cache_size(fp,w,h,1,NULL);
 
 		// ScanPixelを設定する+解析・ロゴデータ作成
 		SetScanPixel(fp,sp,w,h,start,end,editp);
@@ -454,6 +492,7 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp)
 	if(sp==NULL)
 		throw "メモリが確保できませんでした";
 
+	AbortDlgParam param;
 
 	param.fp     = fp;
 	param.editp  = editp;

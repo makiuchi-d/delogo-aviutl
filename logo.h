@@ -62,12 +62,12 @@ typedef struct {
 *		ロゴの各ピクセルごとの情報を記録
 *-------------------------------------------------------------------*/
 typedef struct {
-	short dp_y;		/* 不透明度（輝度）*/
-	short y;		/* 輝度            */
-	short dp_cb;	/* 不透明度（青）  */
-	short cb;		/* 色差（青）      */
-	short dp_cr;	/* 不透明度（赤）  */
-	short cr;		/* 色差（赤）      */
+	short dp_y;		/* 不透明度（輝度）            */
+	short y;		/* 輝度              0～4096   */
+	short dp_cb;	/* 不透明度（青）              */
+	short cb;		/* 色差（青）    -2048～2048   */
+	short dp_cr;	/* 不透明度（赤）              */
+	short cr;		/* 色差（赤）    -2048～2048   */
 } LOGO_PIXEL;
 
 

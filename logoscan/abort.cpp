@@ -40,6 +40,9 @@ int   comp_short(const void* x,const void* y);
 short med_average(short* s,int n);
 void  CreateLogoData(AbortDlgParam* p,HWND hdlg);//FILTER* fp,ScanPixel*& sp,void*&);
 
+
+
+
 /*====================================================================
 * 	AbortDlgProc()		コールバックプロシージャ
 *===================================================================*/
@@ -54,7 +57,7 @@ BOOL CALLBACK AbortDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch(msg){
 		case WM_INITDIALOG:
 			p = (AbortDlgParam*)lParam;
-			SetTimer(hdlg,IDD_TIMER,1,NULL);
+			SetTimer(hdlg,IDD_TIMER,1,NULL);	// 初期化のために解析開始を遅らせる
 			SetDlgItemInt(hdlg,IDC_ALLF,p->e-p->s+1,false);
 			examine = useable = 0;
 			abort = false;
@@ -80,7 +83,7 @@ BOOL CALLBACK AbortDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
 			try{
 				SendDlgItemMessage(hdlg,IDC_PROGRESS,PBM_SETRANGE,0,MAKELPARAM(0,p->e-p->s+1));
 
-				while(p->s+examine <= p->e && !abort){
+				while(examine <= p->e-p->s && !abort){
 					// pump windows message
 					MSG message;
 					while(PeekMessage(&message, NULL, 0, 0, PM_REMOVE)){
@@ -117,6 +120,9 @@ BOOL CALLBACK AbortDlgProc(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				// ロゴデータ作成
 				CreateLogoData(p,hdlg);
+
+				if(!abort)
+					MessageBeep(-1);
 			}
 			catch(const char* str){
 				p->errstr = str;
@@ -213,18 +219,28 @@ bool Cal_BGcolor(PIXEL_YC& r,PIXEL_YC* pix,XYWH& xywh,int w,int thy)
 		pix++;
 	}
 
-	// ソートして真中らへんを平均
-	r.y  = med_average(y,n);
-	r.cb = med_average(cb,n);
-	r.cr = med_average(cr,n);
-
 	bool ret = true;	// 返却値
 
 	// 最小と最大が閾値以上離れている場合、単一色でないと判断
-	if((abs(y[0] - y[n-1])>thy*8) ||
-	   (abs(cb[0]-cb[n-1])>thy*8) ||
-	   (abs(cr[0]-cr[n-1])>thy*8))
+	qsort(y,n,sizeof(short),comp_short);
+	if(abs(y[0] - y[n-1])>thy*8)
+		ret = false;
+	else {
+		qsort(cb,n,sizeof(short),comp_short);
+		if(abs(cb[0]-cb[n-1])>thy*8)
 			ret = false;
+		else {
+			qsort(cr,n,sizeof(short),comp_short);
+			if(abs(cr[0]-cr[n-1])>thy*8)
+				ret = false;
+		}
+	}
+
+	if(ret){	// 真中らへんを平均
+		r.y  = med_average(y,n);
+		r.cb = med_average(cb,n);
+		r.cr = med_average(cr,n);
+	}
 
 	delete[] y;
 	delete[] cb;
@@ -242,21 +258,21 @@ int comp_short(const void* x,const void* y)
 }
 
 /*--------------------------------------------------------------------
-*	ソートして真中らへんを平均
+*	真中らへんを平均
 *-------------------------------------------------------------------*/
 short med_average(short* s,int n)
 {
-	double t  =0.0;
-	int    nn =0;
+	double t  =0;
+	int  nn =0;
 
 	// ソートする
-	qsort(s,n,sizeof(short),comp_short);
+//	qsort(s,n,sizeof(short),comp_short);
 
 	// 真中らへんを平均
-	for(int i=n/3;i<n-(n/3);i++,nn++)
+	for(int i=n/4;i<n-(n/4);i++,nn++)
 		t += s[i];
 
-	t = t / nn + 0.5;
+	t = (t + nn/2) / nn;
 
 	return ((short)t);
 }

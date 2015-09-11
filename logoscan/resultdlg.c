@@ -21,11 +21,11 @@
 FILTER* dlgfp;	// FILTER構造体
 char    defname[32];	// デフォルトロゴ名
 
-PIXEL* pix;	// 表示用ビットマップ
-BITMAPINFO  bmi;
+static PIXEL* pix;	// 表示用ビットマップ
+static BITMAPINFO  bmi;
 
-UINT WM_SEND_LOGO_DATA;	// ロゴデータ送信メッセージ
-FILTER* delogofp;	// ロゴ消しフィルタFILTER構造体
+static UINT WM_SEND_LOGO_DATA;	// ロゴデータ送信メッセージ
+static FILTER* delogofp;	// ロゴ消しフィルタFILTER構造体
 
 
 extern void* logodata;	// ロゴデータ（解析結果）[filter.cpp]
@@ -61,6 +61,7 @@ BOOL CALLBACK ResultDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 				case IDCANCEL:
 				case IDC_CLOSE:	// 閉じるボタン
 					if(pix) VirtualFree(pix,0,MEM_RELEASE);
+					pix = NULL;
 					EndDialog(hdlg,LOWORD(wParam));
 					break;
 
@@ -108,8 +109,7 @@ static void Wm_initdialog(HWND hdlg)
 	SendDlgItemMessage(hdlg,IDC_SPINB, UDM_SETRANGE, 0, 255);
 
 	// メモリ確保
-	pix = (PIXEL*)VirtualAlloc(NULL,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL)
-																	,MEM_RESERVE,PAGE_READWRITE);
+	pix = NULL;//(PIXEL*)VirtualAlloc(NULL,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_RESERVE,PAGE_READWRITE);
 
 	// ロゴ消しフィルタを探す
 	delogofp = NULL;
@@ -155,8 +155,7 @@ static void DispLogo(HWND hdlg)
 	bmi.bmiHeader.biCompression = BI_RGB;
 
 	// メモリ再確保
-	pix = (PIXEL*)VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL)
-																	,MEM_COMMIT,PAGE_READWRITE);
+	pix = VirtualAlloc(pix,bmi.bmiHeader.biWidth*bmi.bmiHeader.biHeight*sizeof(PIXEL),MEM_COMMIT,PAGE_READWRITE);
 	if(pix==NULL){
 		MessageBox(hdlg,"メモリが確保できませんでした\nDispLogo()",filter_name,MB_OK|MB_ICONERROR);
 		return;	// 何もしない
@@ -208,8 +207,8 @@ static void DispLogo(HWND hdlg)
 		}
 	}
 
-	i = (rec.right-rec.left - lgh->w*magnify)/2 + rec.left;	// 中央に表示するように
-	j = (rec.bottom-rec.top - lgh->h*magnify)/2 + rec.top;	// left,topを計算
+	i = (rec.right-rec.left - lgh->w*magnify +1)/2 + rec.left;	// 中央に表示するように
+	j = (rec.bottom-rec.top - lgh->h*magnify +1)/2 + rec.top;	// left,topを計算
 
 	// デバイスコンテキスト取得
 	hdc = GetDC(panel);

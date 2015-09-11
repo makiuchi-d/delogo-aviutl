@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.06
+* 								ver 0.07
 * 
 * 2003
 * 	02/01:	製作開始
@@ -45,7 +45,14 @@
 * 			位置調整が４の倍数のときcreate_adj_exdata()を呼ばないようにした。（0.05）
 * 	06/30:	フェードイン・アウトに対応。 (0.06)
 * 	07/02:	ロゴデータを受信できない場合があったのを修正。
-* 	07/03:	YCbCrの範囲チェックをするようにした。（しないと落ちることがある）(0.06a)
+* 	07/03:	YCbCrの範囲チェックをするようにした。(しないと落ちることがある)
+* 			ロゴ名編集で同名にせっていできないようにした。(0.06a)
+* 	08/01:	フェードの不透明度計算式を見直し
+* 	08/02:	実数演算を止め、無駄な演算を削除して高速化。
+*			上に伴い深度のデフォルト値を変更。
+*			細かな修正
+*	09/05:	細かな修正
+*	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.07)
 * 
 *********************************************************************/
 
@@ -94,6 +101,8 @@
 #define ID_COMBO_LOGO    40002
 
 #define Abs(x) ((x>0)? x:-x)
+#define Clamp(n,l,h) ((n<l) ? l : (n>h) ? h : n)
+
 
 #define LOGO_FADE_MAX    256
 
@@ -147,15 +156,15 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.06 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.07 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
 							"深度", "Y", "Cb", "Cr", 
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
-int   track_default[] = {    0,    0, 100,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
+int   track_default[] = {    0,    0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
 int   track_s[]       = { -200, -200,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = {  200,  200, 200,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
+int   track_e[]       = {  200,  200, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N
@@ -318,13 +327,13 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 		if(fpip->frame < s+fp->track[LOGO_STRT])
 			return FALSE;	// フェードイン前
 		else	// フェードイン
-			fade = (fpip->frame-s-fp->track[LOGO_STRT]+1)*LOGO_FADE_MAX / (fp->track[LOGO_FIN]+1);
+			fade = ((fpip->frame-s-fp->track[LOGO_STRT])*2 +1)*LOGO_FADE_MAX / (fp->track[LOGO_FIN]*2);
 	}
 	else if(fpip->frame > e-fp->track[LOGO_FOUT]-fp->track[LOGO_END]){
 		if(fpip->frame > e-fp->track[LOGO_END])
 			return FALSE;	// フェードアウト後
 		else	// フェードアウト
-			fade = (e-fpip->frame-fp->track[LOGO_END]+1)*LOGO_FADE_MAX / (fp->track[LOGO_FOUT]+1);
+			fade = ((e-fpip->frame-fp->track[LOGO_END])*2+1)*LOGO_FADE_MAX / (fp->track[LOGO_FOUT]*2);
 	}
 	else
 		fade = LOGO_FADE_MAX;	// 通常
@@ -354,10 +363,10 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int fade)
 {
 	int   i,j;
-	int   y,cb,cr;
+	int   yc;
+	int   dp;
 	PIXEL_YC    *ptr;
 	LOGO_PIXEL  *lgp;
-	double dp,temp;
 
 
 	// LOGO_PIXELデータへのポインタ
@@ -367,46 +376,43 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int
 	ptr = fpip->ycp_edit;
 	ptr += lgh->x + lgh->y * fpip->max_w;
 
-	for(i=0;i < lgh->h;i++){
-		for(j=0;j < lgh->w;j++){
+	for(i=0;i < lgh->h;++i){
+		for(j=0;j < lgh->w;++j){
 
 			if(ptr >= fpip->ycp_edit &&	// 画面内の時のみ処理
 			   ptr < fpip->ycp_edit + fpip->max_w*fpip->h)
 			{
 				// 輝度
-				dp = lgp->dp_y * ((double)fp->track[LOGO_YDP]/100);	// 調整
-				dp = dp * fade / LOGO_FADE_MAX;						// フェード不透明度
-				y  = lgp->y + fp->track[LOGO_PY]*16;
-				if(dp==LOGO_MAX_DP) dp--;							// 0での除算回避
-				temp = ((double)ptr->y*LOGO_MAX_DP - y*dp) / (LOGO_MAX_DP - dp) +0.5;	// 逆算
-				if  (temp>4096 +128) temp = 4096 +128;	// 範囲チェック
-				else if(temp<0 -128) temp = 0    -128;
-				ptr->y = temp;
+				dp = (lgp->dp_y * fp->track[LOGO_YDP] * fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
+					yc = lgp->y + fp->track[LOGO_PY]*16;
+					yc = (ptr->y*LOGO_MAX_DP - yc*dp +(LOGO_MAX_DP-dp)/2) /(LOGO_MAX_DP - dp);	// 逆算
+					ptr->y = Clamp(yc,-128,4096+128);
+				}
 
 				// 色差(青)
-				dp = lgp->dp_cb * ((double)fp->track[LOGO_CBDP]/100);
-				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
-				cb = lgp->cb    + fp->track[LOGO_CB]*16;
-				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
-				temp = ((double)ptr->cb*LOGO_MAX_DP - cb*dp) / (LOGO_MAX_DP - dp) +0.5;
-				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
-				else if(temp<-2048-128) temp = -2048 -128;
-				ptr->cb = temp;
+				dp = (lgp->dp_cb * fp->track[LOGO_CBDP] * fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
+					yc = lgp->cb + fp->track[LOGO_CB]*16;
+					yc = (ptr->cb*LOGO_MAX_DP - yc*dp +(LOGO_MAX_DP-dp)/2) /(LOGO_MAX_DP - dp);
+					ptr->cb = Clamp(yc,-2048-128,2048+128);
+				}
 
 				// 色差(赤)
-				dp = lgp->dp_cr * ((double)fp->track[LOGO_CRDP]/100);
-				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
-				cr = lgp->cr   + fp->track[LOGO_CR]*16;
-				if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
-				temp = ((double)ptr->cr*LOGO_MAX_DP - cr*dp) / (LOGO_MAX_DP - dp) +0.5;
-				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
-				else if(temp<-2048-128) temp = -2048 -128;
-				ptr->cr = temp;
+				dp = (lgp->dp_cr * fp->track[LOGO_CRDP] * fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					if(dp==LOGO_MAX_DP) dp--;	// 0での除算回避
+					yc = lgp->cr + fp->track[LOGO_CR]*16;
+					yc = (ptr->cr*LOGO_MAX_DP - yc*dp +(LOGO_MAX_DP-dp)/2) /(LOGO_MAX_DP - dp);
+					ptr->cr = Clamp(yc,-2048-128,2048+128);
+				}
 
 			}	// if画面内
 
-			ptr++;	// 隣りへ
-			lgp++;
+			++ptr;	// 隣りへ
+			++lgp;
 		}
 		// 次のラインへ
 		ptr += fpip->max_w - j;
@@ -421,10 +427,10 @@ BOOL func_proc_eraze_logo(FILTER* fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int
 BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int fade)
 {
 	int   i,j;
-	int   y,cb,cr;
+	int   yc;
 	PIXEL_YC    *ptr;
 	LOGO_PIXEL  *lgp;
-	double dp,temp;
+	int  dp;
 
 
 	// LOGO_PIXELデータへのポインタ
@@ -434,45 +440,41 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int f
 	ptr = fpip->ycp_edit;
 	ptr += lgh->x + lgh->y * fpip->max_w;
 
-	for(i=0;i < lgh->h;i++){
-		for(j=0;j < lgh->w;j++){
+	for(i=0;i < lgh->h;++i){
+		for(j=0;j < lgh->w;++j){
 
 			if(ptr >= fpip->ycp_edit &&	// 画面内の時のみ処理
 			   ptr < fpip->ycp_edit + fpip->max_w*fpip->h)
 			{
-
 				// 輝度
-				dp = lgp->dp_y * ((double)fp->track[LOGO_YDP]/100);
-				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
-				y  = lgp->y    + fp->track[LOGO_PY]*16;
-				temp  = ((double)ptr->y*(LOGO_MAX_DP-dp) + y*dp) / LOGO_MAX_DP +0.5;	// ロゴ付加
-				if  (temp>4096 +128) temp = 4096 +128;	// 範囲チェック
-				else if(temp<0 -128) temp = 0    -128;
-				ptr->y = temp;
+				dp = (lgp->dp_y * fp->track[LOGO_YDP] *fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					yc = lgp->y    + fp->track[LOGO_PY]*16;
+					yc = (ptr->y*(LOGO_MAX_DP-dp) + yc*dp +(LOGO_MAX_DP/2)) /LOGO_MAX_DP;	// ロゴ付加
+					ptr->y = Clamp(yc,-128,4096+128);
+				}
 
 
 				// 色差(青)
-				dp = lgp->dp_cb * ((double)fp->track[LOGO_CBDP]/100);
-				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
-				cb = lgp->cb    + fp->track[LOGO_CB]*16;
-				temp  = ((double)ptr->cb*(LOGO_MAX_DP-dp) + cb*dp) / LOGO_MAX_DP +0.5;
-				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
-				else if(temp<-2048-128) temp = -2048 -128;
-				ptr->cb = temp;
+				dp = (lgp->dp_cb * fp->track[LOGO_CBDP] *fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					yc = lgp->cb   + fp->track[LOGO_CB]*16;
+					yc = (ptr->cb*(LOGO_MAX_DP-dp) + yc*dp +(LOGO_MAX_DP/2)) /LOGO_MAX_DP;
+					ptr->cb = Clamp(yc,-2048-128,2048+128);
+				}
 
-				// 色差(赤)			//pow(2,(double)fp->track[LOGO_CRDP]/128);
-				dp = lgp->dp_cr * ((double)fp->track[LOGO_CRDP]/100);
-				dp = dp * fade / LOGO_FADE_MAX;		// フェード不透明度
-				cr = lgp->cr   + fp->track[LOGO_CR]*16;
-				temp  = ((double)ptr->cr*(LOGO_MAX_DP-dp) + cr*dp) / LOGO_MAX_DP +0.5;
-				if     (temp> 2048+128) temp =  2048 +128;	// 範囲チェック
-				else if(temp<-2048-128) temp = -2048 -128;
-				ptr->cr = temp;
+				// 色差(赤)
+				dp = (lgp->dp_cr * fp->track[LOGO_CRDP] * fade +64)/128 /LOGO_FADE_MAX;
+				if(dp){
+					yc = lgp->cr   + fp->track[LOGO_CR]*16;
+					yc = (ptr->cr*(LOGO_MAX_DP-dp) + yc*dp +(LOGO_MAX_DP/2)) /LOGO_MAX_DP;
+					ptr->cr = Clamp(yc,-2048-128,2048+128);
+				}
 
 			}	// if画面内
 
-			ptr++;	// 隣りへ
-			lgp++;
+			++ptr;	// 隣りへ
+			++lgp;
 		}
 		// 次のラインへ
 		ptr += fpip->max_w - j;
@@ -488,7 +490,7 @@ static int  find_logo(const char *logo_name)
 {
 	unsigned int i;
 
-	for(i=0;i<logodata_n;i++){
+	for(i=0;i<logodata_n;++i){
 		if(lstrcmp((char *)logodata[i],logo_name)==0)
 			return i;
 	}
@@ -700,7 +702,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	ex[0].y  = df[0].y;
 	ex[0].cb = df[0].cb;
 	ex[0].cr = df[0].cr;
-	for(i=1;i<w-1;i++){									//中
+	for(i=1;i<w-1;++i){									//中
 		// Y
 		ex[i].dp_y = (df[i-1].dp_y*adjx*(4-adjy)
 							+ df[i].dp_y*(4-adjx)*(4-adjy)) /16;
@@ -731,7 +733,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	ex[i].cr = df[i-1].cr;
 
 	//----------------------------------------------------------- 中
-	for(j=1;j<h-1;j++){
+	for(j=1;j<h-1;++j){
 		// 輝度Y		//---------------------- 左端
 		ex[j*w].dp_y = (df[(j-1)*data->w].dp_y*(4-adjx)*adjy
 						+ df[j*data->w].dp_y*(4-adjx)*(4-adjy)) /16;
@@ -753,7 +755,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 			ex[j*w].cr = (df[(j-1)*data->w].cr*Abs(df[(j-1)*data->w].dp_cr)*(4-adjx)*adjy
 						+ df[j*data->w].cr*Abs(df[j*data->w].dp_cr)*(4-adjx)*(4-adjy))
 				/ (Abs(df[(j-1)*data->w].dp_cr)*(4-adjx)*adjy+Abs(df[j*data->w].dp_cr)*(4-adjx)*(4-adjy));
-		for(i=1;i<w-1;i++){	//------------------ 中
+		for(i=1;i<w-1;++i){	//------------------ 中
 			// Y
 			ex[j*w+i].dp_y = (df[(j-1)*data->w+i-1].dp_y*adjx*adjy
 							+ df[(j-1)*data->w+i].dp_y*(4-adjx)*adjy
@@ -820,7 +822,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	ex[j*w].y  = df[(j-1)*data->w].y;
 	ex[j*w].cb = df[(j-1)*data->w].cb;
 	ex[j*w].cr = df[(j-1)*data->w].cr;
-	for(i=1;i<w-1;i++){		// 中
+	for(i=1;i<w-1;++i){		// 中
 		// Y
 		ex[j*w+i].dp_y = (df[(j-1)*data->w+i-1].dp_y * adjx * adjy
 								+ df[(j-1)*data->w+i].dp_y * (4-adjx) *adjy) /16;

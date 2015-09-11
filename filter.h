@@ -1,5 +1,5 @@
 //----------------------------------------------------------------------------------
-//	フィルタプラグイン ヘッダーファイル for AviUtl version 0.98d 以降
+//	フィルタプラグイン ヘッダーファイル for AviUtl version 0.99 以降
 //	By ＫＥＮくん
 //----------------------------------------------------------------------------------
 
@@ -38,7 +38,7 @@ typedef struct {
 	int			audio_ch;		//	オーディオチャンネル数
 	PIXEL		*pixelp;		//	現在は使用されていません
 	void		*editp;			//	エディットハンドル
-	int			yc_size;		//	YCbCrのバイトサイズ
+	int			yc_size;		//	画像領域の画素のバイトサイズ
 	int			line_size;		//	画像領域の幅のバイトサイズ
 	int			reserve[8];		//	拡張用に予約されてます
 } FILTER_PROC_INFO;
@@ -58,7 +58,7 @@ typedef struct {
 							//	FRAME_STATUS_INTER_EVEN		: 偶数
 							//	FRAME_STATUS_INTER_MIX		: 二重化
 							//	FRAME_STATUS_INTER_AUTO		: 自動
-	int		index24fps;		//	24fpの周期
+	int		index24fps;		//	現在は使用されていません
 	int		config;			//	フレームの設定環境の番号
 	int		vcm;			//	フレームの圧縮設定の番号
 	int		edit_flag;		//	編集フラグ
@@ -97,8 +97,10 @@ typedef struct {
 //	システムインフォメーション構造体
 typedef struct {
 	int		flag;					//	システムフラグ
-									//	SYS_INFO_FLAG_EDIT	: 編集中
-									//	SYS_INFO_FLAG_VFAPI	: VFAPI動作時
+									//	SYS_INFO_FLAG_EDIT		: 編集中
+									//	SYS_INFO_FLAG_VFAPI		: VFAPI動作時
+									//	SYS_INFO_FLAG_USE_SSE	: SSE使用
+									//	SYS_INFO_FLAG_USE_SSE2	: SSE2使用
 	LPSTR	info;					//	バージョン情報
 	int		filter_n;				//	登録されてるフィルタの数
 	int		min_w,min_h;			//	編集出来る最小画像サイズ
@@ -108,10 +110,14 @@ typedef struct {
 	LPSTR	project_name;			//	プロジェクトファイル名 (ファイル名が決まっていない時は何も入っていません)
 	LPSTR	output_name;			//	出力ファイル名 (ファイル名が決まっていない時は何も入っていません)
 	int		vram_w,vram_h;			//	編集用画像領域のサイズ
-	int		reserve[6];				//	拡張用に予約されてます
+	int		vram_yc_size;			//	編集用画像領域の画素のバイト数 ( PIXEL_YC = 6 , PIXEL_YUY2 = 2 )
+	int		vram_line_size;			//	編集用画像領域の幅のバイト数
+	int		reserve[4];				//	拡張用に予約されてます
 } SYS_INFO;
-#define SYS_INFO_FLAG_EDIT	1
-#define SYS_INFO_FLAG_VFAPI	2
+#define SYS_INFO_FLAG_EDIT		1
+#define SYS_INFO_FLAG_VFAPI		2
+#define SYS_INFO_FLAG_USE_SSE	4
+#define SYS_INFO_FLAG_USE_SSE2	8
 
 //	外部関数構造体
 typedef struct {
@@ -484,8 +490,11 @@ typedef struct {
 								//	開始時に呼ばれる関数へのポインタ (NULLなら呼ばれません)
 	BOOL	(*func_exit)( void *fp );
 								//	終了時に呼ばれる関数へのポインタ (NULLなら呼ばれません)
-	BOOL	(*func_update)( void *fp );
+	BOOL	(*func_update)( void *fp,int status );
 								//	自分の設定が変更されたときに呼ばれる関数へのポインタ (NULLなら呼ばれません)
+								//	FILTER_UPDATE_STATUS_ALL		: 全項目が変更された
+								//	FILTER_UPDATE_STATUS_TRACK + n	: n番目のトラックバーが変更された
+								//	FILTER_UPDATE_STATUS_CHECK + n	: n番目のチェックボックスが変更された
 	BOOL 	(*func_WndProc)( HWND hwnd,UINT message,WPARAM wparam,LPARAM lparam,void *editp,void *fp );
 								//	設定ウィンドウにウィンドウメッセージが来た時に呼ばれる関数へのポインタ (NULLなら呼ばれません)
 								//	VFAPI動作時には呼ばれません。
@@ -573,6 +582,9 @@ typedef struct {
 #define	WM_FILTER_MAIN_KEY_DOWN			(WM_USER+123)
 #define	WM_FILTER_MAIN_KEY_UP			(WM_USER+124)
 #define	WM_FILTER_MAIN_MOVESIZE			(WM_USER+125)
+#define FILTER_UPDATE_STATUS_ALL		0
+#define FILTER_UPDATE_STATUS_TRACK		0x10000
+#define FILTER_UPDATE_STATUS_CHECK		0x20000
 
 //	フィルタDLL用構造体
 typedef struct {
@@ -589,7 +601,7 @@ typedef struct {
 	BOOL		(*func_proc)( FILTER *fp,FILTER_PROC_INFO *fpip );
 	BOOL		(*func_init)( FILTER *fp );
 	BOOL		(*func_exit)( FILTER *fp );
-	BOOL		(*func_update)( FILTER *fp );
+	BOOL		(*func_update)( FILTER *fp,int status );
 	BOOL 		(*func_WndProc)( HWND hwnd,UINT message,WPARAM wparam,LPARAM lparam,void *editp,FILTER *fp );
 	int			*track,*check;
 	void		*ex_data_ptr;
@@ -610,7 +622,7 @@ typedef struct {
 BOOL func_proc( FILTER *fp,FILTER_PROC_INFO *fpip );
 BOOL func_init( FILTER *fp );
 BOOL func_exit( FILTER *fp );
-BOOL func_update( FILTER *fp );
+BOOL func_update( FILTER *fp,int status );
 BOOL func_WndProc( HWND hwnd,UINT message,WPARAM wparam,LPARAM lparam,void *editp,FILTER *fp );
 BOOL func_save_start( FILTER *fp,int s,int e,void *editp );
 BOOL func_save_end( FILTER *fp,void *editp );

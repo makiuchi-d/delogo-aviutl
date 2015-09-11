@@ -719,8 +719,8 @@ static void DispLogo(HWND hdlg)
 		}
 	}
 
-	i = (rec.right-rec.left - lgh->w*magnify)/2 + rec.left;	// 中央に表示するように
-	j = (rec.bottom-rec.top - lgh->h*magnify)/2 + rec.top;	// left,topを計算
+	i = (rec.right-rec.left - lgh->w*magnify +1)/2 + rec.left;	// 中央に表示するように
+	j = (rec.bottom-rec.top - lgh->h*magnify +1)/2 + rec.top;	// left,topを計算
 
 	SetStretchBltMode(hdc,COLORONCOLOR);
 	// 拡大表示
