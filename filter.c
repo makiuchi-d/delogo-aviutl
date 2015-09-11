@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.09a
+* 								ver 0.10
 * 
 * 2003
 * 	02/01:	製作開始
@@ -64,13 +64,13 @@
 * 			開始・フェードイン・アウト・終了の初期値をロゴデータに保存できるようにした。(0.09)
 * 2005
 * 	04/18:	フィルタ名、パラメタ名を変更できるようにした。(0.09a)
+* 2007
+* 	11/07:	プロファイルの境界をフェードの基点にできるようにした。(0.10)
 * 
 *********************************************************************/
 
 /* ToDo:
 * 	・ロゴデータの作成・編集機能
-* 	・ロゴデータに開始･終了･フェードの情報埋め込み
-* 		コンボボックスで変更された時だけそれらを反映させる（たくや氏よ、プロファイル使えば必要ないでしょうに
 * 
 *  MEMO:
 * 	・ロゴの拡大縮小ルーチン自装しないとだめかなぁ。
@@ -161,6 +161,7 @@ static void read_logo_pack(char *logodata_file,FILTER *fp);
 static void set_sended_data(void* logodata,FILTER* fp);
 static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER *data);
 static int  find_logo(const char *logo_name);
+static int calc_fade(FILTER *fp,FILTER_PROC_INFO *fpip);
 
 static BOOL on_option_button(FILTER* fp);
 static BOOL on_avisynth_button(FILTER* fp,void* editp);
@@ -172,7 +173,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.09a by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.10 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
@@ -182,10 +183,10 @@ int   track_default[] = {           0,           0, 128,    0,    0,    0, 0, 0,
 int   track_s[]       = { LOGO_XY_MIN, LOGO_XY_MIN,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
 int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
 #endif
-#define check_N 2
+#define check_N 3
 #if check_N
-TCHAR *check_name[]   = { "ロゴ付加モード","ロゴ除去モード" };	// チェックボックス
-int   check_default[] = { 0, 1 };	// デフォルト
+TCHAR *check_name[]   = { "ロゴ付加モード","ロゴ除去モード","ﾌﾟﾛﾌｧｲﾙ境界をﾌｪｰﾄﾞ基点にする" };	// チェックボックス
+int   check_default[] = { 0, 1, 0 };	// デフォルト
 #endif
 
 #define LOGO_X      0
@@ -201,13 +202,16 @@ int   check_default[] = { 0, 1 };	// デフォルト
 #define LOGO_FOUT   8
 #define LOGO_END    9
 
+#define LOGO_ADDMODE 0
+#define LOGO_DELMODE 1
+#define LOGO_BASEPROFILE 2
+
 // 設定ウィンドウの高さ
 #define WND_Y (67+24*track_N+20*check_N)
 
 
 FILTER_DLL filter = {
 	FILTER_FLAG_WINDOW_SIZE |	//	フィルタのフラグ
-	FILTER_FLAG_RADIO_BUTTON |
 	FILTER_FLAG_EX_DATA |
 	FILTER_FLAG_EX_INFORMATION,
 	320,WND_Y,			// 設定ウインドウのサイズ
@@ -328,32 +332,12 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 	static char adjdata[LOGO_MAXSIZE];
 	int num;
 	int fade;
-	int s,e;
 
 	// ロゴ検索
 	num = find_logo(fp->ex_data_ptr);
 	if(num<0) return FALSE;
 
-	// 選択範囲取得
-	if(!fp->exfunc->get_select_frame(fpip->editp,&s,&e))
-		return FALSE;
-
-	// フェード不透明度計算
-	if(fpip->frame < s+fp->track[LOGO_STRT]+fp->track[LOGO_FIN]){
-		if(fpip->frame < s+fp->track[LOGO_STRT])
-			return FALSE;	// フェードイン前
-		else	// フェードイン
-			fade = ((fpip->frame-s-fp->track[LOGO_STRT])*2 +1)*LOGO_FADE_MAX / (fp->track[LOGO_FIN]*2);
-	}
-	else if(fpip->frame > e-fp->track[LOGO_FOUT]-fp->track[LOGO_END]){
-		if(fpip->frame > e-fp->track[LOGO_END])
-			return FALSE;	// フェードアウト後
-		else	// フェードアウト
-			fade = ((e-fpip->frame-fp->track[LOGO_END])*2+1)*LOGO_FADE_MAX / (fp->track[LOGO_FOUT]*2);
-	}
-	else
-		fade = LOGO_FADE_MAX;	// 通常
-
+	fade = calc_fade(fp,fpip);
 
 	if(fp->track[LOGO_X]%4 || fp->track[LOGO_Y]%4){
 		// 位置調整が４の倍数でないとき、1/4ピクセル単位調整
@@ -367,7 +351,7 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 		((LOGO_HEADER *)adjdata)->y += fp->track[LOGO_Y] / 4;
 	}
 
-	if(fp->check[1])	// 除去モードチェック
+	if(fp->check[LOGO_DELMODE])	// 除去モードチェック
 		return func_proc_eraze_logo(fp,fpip,(void *)adjdata,fade);	// ロゴ除去モード
 	else
 		return func_proc_add_logo(fp,fpip,(void *)adjdata,fade);	// ロゴ付加モード
@@ -502,7 +486,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int f
 /*--------------------------------------------------------------------
 * 	find_logo()		ロゴ名からロゴデータを検索
 *-------------------------------------------------------------------*/
-static int  find_logo(const char *logo_name)
+static int find_logo(const char *logo_name)
 {
 	unsigned int i;
 
@@ -514,11 +498,71 @@ static int  find_logo(const char *logo_name)
 	return -1;
 }
 
+/*--------------------------------------------------------------------
+* 	calc_fade()		フェード不透明度計算
+*-------------------------------------------------------------------*/
+static int calc_fade(FILTER *fp,FILTER_PROC_INFO *fpip)
+{
+	int fade;
+	int s,e;
+
+	if(fp->check[LOGO_BASEPROFILE]){
+		FRAME_STATUS fs;
+		int profile;
+		int i;
+
+		if(!fp->exfunc->get_frame_status(fpip->editp,fpip->frame,&fs))
+			return LOGO_FADE_MAX;
+		profile = fs.config;
+
+		for(i=fpip->frame;i;--i){
+			if(!fp->exfunc->get_frame_status(fpip->editp,i-1,&fs))
+				return LOGO_FADE_MAX;
+			if(fs.config != profile)
+				break;
+		}
+		s = i;
+
+		for(i=fpip->frame;i<fpip->frame_n-1;++i){
+			if(!fp->exfunc->get_frame_status(fpip->editp,i+1,&fs))
+				return LOGO_FADE_MAX;
+			if(fs.config != profile)
+				break;
+		}
+		e = i;
+	}
+	else{
+		// 選択範囲取得
+		if(!fp->exfunc->get_select_frame(fpip->editp,&s,&e))
+			return LOGO_FADE_MAX;
+	}
+
+	// フェード不透明度計算
+	if(fpip->frame < s+fp->track[LOGO_STRT]+fp->track[LOGO_FIN]){
+		if(fpip->frame < s+fp->track[LOGO_STRT])
+			return 0;	// フェードイン前
+		else	// フェードイン
+			fade = ((fpip->frame-s-fp->track[LOGO_STRT])*2 +1)*LOGO_FADE_MAX / (fp->track[LOGO_FIN]*2);
+	}
+	else if(fpip->frame > e-fp->track[LOGO_FOUT]-fp->track[LOGO_END]){
+		if(fpip->frame > e-fp->track[LOGO_END])
+			return 0;	// フェードアウト後
+		else	// フェードアウト
+			fade = ((e-fpip->frame-fp->track[LOGO_END])*2+1)*LOGO_FADE_MAX / (fp->track[LOGO_FOUT]*2);
+	}
+	else
+		fade = LOGO_FADE_MAX;	// 通常
+
+	return fade;
+}
+
 /*====================================================================
 *	設定ウィンドウプロシージャ
 *===================================================================*/
 BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, void *editp, FILTER *fp )
 {
+	static int mode = 1;	// 0:addlogo; 1:delogo
+
 	if(message==WM_SEND_LOGO_DATA){	// ロゴデータ受信
 		set_sended_data((void *)wParam,fp);
 		return TRUE;
@@ -537,6 +581,20 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, void *
 		case WM_FILTER_SAVE_END:	// セーブ終了
 			// コンボボックス表示更新
 			update_cb_logo(ex_data);
+			break;
+
+		case WM_FILTER_CHANGE_PARAM:
+			if(fp->check[!mode]){	// モードが変更された
+				fp->check[mode] = 0;
+				fp->exfunc->filter_window_update(fp);
+				mode = !mode;
+				return TRUE;
+			}
+			else if(!fp->check[mode]){
+				fp->check[mode] = 1;
+				fp->exfunc->filter_window_update(fp);
+				return TRUE;
+			}
 			break;
 
 		//---------------------------------------------ボタン動作
@@ -1258,4 +1316,5 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
   }
   return TRUE;
 }
+
 //*/
