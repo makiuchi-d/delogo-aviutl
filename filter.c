@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.08a
+* 								ver 0.09a
 * 
 * 2003
 * 	02/01:	製作開始
@@ -61,7 +61,9 @@
 * 	04/17:	ロゴデータファイル読み込み時にデータが一つも無い時エラーを出さないようにした。
 * 			開始･終了の最大値を4096まで増やした。(0.08a)
 * 	09/19:	スタックを無駄遣いしていたのを修正。
-* 			開始・フェードイン・アウト・終了の初期値をロゴデータに保存できるようにした。
+* 			開始・フェードイン・アウト・終了の初期値をロゴデータに保存できるようにした。(0.09)
+* 2005
+* 	04/18:	フィルタ名、パラメタ名を変更できるようにした。(0.09a)
 * 
 *********************************************************************/
 
@@ -170,7 +172,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.09 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.09a by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
@@ -1195,4 +1197,65 @@ static BOOL on_avisynth_button(FILTER* fp,void *editp)
 }
 
 
+
+/*********************************************************************
+*	DLLMain
+*********************************************************************/
+BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
+{
+#define TRACK_N track_N
+#define CHECK_N check_N
+#define FILTER_NAME_MAX  32
+#define FILTER_TRACK_MAX 16
+#define FILTER_CHECK_MAX 32
+
+  //FILTER filter = ::filter;
+  static char *strings[1+TRACK_N+CHECK_N];
+  char key[16];
+  char ini_name[MAX_PATH];
+  int i;
+
+  switch(fdwReason){
+    case DLL_PROCESS_ATTACH:	// 開始時
+      // iniファイル名を取得
+      GetModuleFileName(hinstDLL,ini_name,MAX_PATH-4);
+      strcat(ini_name,".ini");
+
+      // フィルタ名
+      strings[0] = malloc(FILTER_NAME_MAX);
+      if(strings[0]==NULL) break;
+      GetPrivateProfileString("string","name",filter.name,strings[0],FILTER_NAME_MAX,ini_name);
+      filter.name = strings[0];
+
+      // トラック名
+      for(i=0;i<TRACK_N;i++){
+        strings[i+1] = malloc(FILTER_TRACK_MAX);
+        if(strings[i+1]==NULL) break;
+        wsprintf(key,"track%d",i);
+        GetPrivateProfileString("string",key,filter.track_name[i],strings[i+1],FILTER_TRACK_MAX,ini_name);
+        filter.track_name[i] = strings[i+1];
+      }
+
+      // チェック名
+      for(i=0;i<CHECK_N;i++){
+        strings[i+TRACK_N+1] = malloc(FILTER_CHECK_MAX);
+        if(strings[i+TRACK_N+1]==NULL) break;
+        wsprintf(key,"check%d",i);
+        GetPrivateProfileString("string",key,filter.check_name[i],strings[i+TRACK_N+1],FILTER_CHECK_MAX,ini_name);
+        filter.check_name[i] = strings[i+TRACK_N+1];
+      }
+      break;
+
+    case DLL_PROCESS_DETACH:	// 終了時
+      // stringsを破棄
+      for(i=0;i<1+TRACK_N+CHECK_N && strings[i];i++)
+        free(strings[i]);
+      break;
+
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+      break;
+  }
+  return TRUE;
+}
 //*/
