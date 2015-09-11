@@ -12,7 +12,7 @@ LFLAG = -tWD -e$(EXE) -O1 -O2
 RFLAG = 
 
 EXE = delogo.auf
-OBJ = filter.obj optdlg.obj editdlg.obj
+OBJ = filter.obj optdlg.obj editdlg.obj strdlg.obj
 RES = delogo.res
 
 
@@ -31,6 +31,9 @@ optdlg.obj: optdlg.c optdlg.h filter.h logo.h resource.h
 
 editdlg.obj: editdlg.c editdlg.h resource.h
 	$(CC) $(CFLAG) editdlg.c
+
+strdlg.obj: strdlg.c strdlg.h resource.h
+	$(CC) $(CFLAG) strdlg.c
 
 $(RES): delogo.rc resource.h
 	$(RC) $(RFLAG) delogo.rc

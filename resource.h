@@ -1,4 +1,7 @@
 // resorce.h
+
+//////////////////////////////////////////////////////////////////////
+//	オプションダイアログ
 #define IDC_STATIC  4100
 #define IDC_LIST    4102
 #define IDC_ADD     4103
@@ -19,5 +22,12 @@
 #define IDC_SPING   4116
 #define IDC_SPINB   4117
 
+//////////////////////////////////////////////////////////////////////
+//	編集ダイアログ
 #define ID_EDIT_NAME    4201
 #define ID_EDIT_NAMETXT 4202
+
+//////////////////////////////////////////////////////////////////////
+//	文字列表示ダイアログ
+#define ID_SHOW_STRING  4301
+#define ID_COPY_STRING  4302

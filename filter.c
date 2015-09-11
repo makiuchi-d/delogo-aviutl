@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.07b
+* 								ver 0.08
 * 
 * 2003
 * 	02/01:	製作開始
@@ -56,17 +56,19 @@
 * 	10/20:	SSE2使用のrgb2ycがバグもちなので、自前でRGB->YCbCrするようにした。
 * 			位置X/Yの最大･最小値を拡張した。(0.07a)
 * 	10/25:	位置調整で-200以下にすると落ちるバグ修正。(0.07b)
+* 2004
+* 	02/18:	AviSynthスクリプトを吐くボタン追加。(0.08)
 * 
 *********************************************************************/
 
 /* ToDo:
 * 	・ロゴデータの作成・編集機能
-* 	・フェードイン・アウトに対応すべきなんだろうなぁ
 * 
 *  MEMO:
 * 	・ロゴの拡大縮小ルーチン自装しないとだめかなぁ。
 * 		→必要なさげ。当面は自装しない。
 * 	・ロゴ作成・編集は別アプリにしてしまおうか…
+* 		使用公開してるし、誰か作ってくれないかなぁ（他力本願）
 * 	・ロゴ除去モードとロゴ付加モードを切り替えられるようにしようかな
 * 		→付けてみた
 * 	・解析プラグからデータを受け取るには…独自WndMsg登録してSendMessageで送ってもらう
@@ -98,10 +100,12 @@
 #include "optdlg.h"
 #include "resource.h"
 #include "send_lgd.h"
+#include "strdlg.h"
 
 
 #define ID_BUTTON_OPTION 40001
 #define ID_COMBO_LOGO    40002
+#define ID_BUTTON_SYNTH  40003
 
 #define Abs(x) ((x>0)? x:-x)
 #define Clamp(n,l,h) ((n<l) ? l : (n>h) ? h : n)
@@ -122,6 +126,7 @@ typedef struct {
 	HFONT font;
 	HWND  cb_logo;
 	HWND  bt_opt;
+	HWND  bt_synth;
 } FILTER_DIALOG;
 
 FILTER_DIALOG dialog;
@@ -153,6 +158,7 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 static int  find_logo(const char *logo_name);
 
 static BOOL on_option_button(FILTER* fp);
+static BOOL on_avisynth_button(FILTER* fp,void* editp);
 
 BOOL func_proc_eraze_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
@@ -161,7 +167,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.07b by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.08 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
@@ -540,6 +546,10 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, void *
 							change_param();
 							return TRUE;
 					}
+					break;
+
+				case ID_BUTTON_SYNTH:	// AviSynthボタン
+					return on_avisynth_button(fp,editp);
 			}
 			break;
 
@@ -666,6 +676,11 @@ static void init_dialog(HWND hwnd,HINSTANCE hinst)
 	dialog.bt_opt = CreateWindow("BUTTON", "オプション", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|BS_VCENTER,
 									240,ITEM_Y, 63,20, hwnd, (HMENU)ID_BUTTON_OPTION, hinst, NULL);
 	SendMessage(dialog.bt_opt, WM_SETFONT, (WPARAM)dialog.font, 0);
+
+	// AviSynthボタン
+	dialog.bt_synth = CreateWindow("BUTTON", "AviSynth", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|BS_VCENTER,
+									240,ITEM_Y-25, 63,20, hwnd, (HMENU)ID_BUTTON_SYNTH, hinst, NULL);
+	SendMessage(dialog.bt_synth, WM_SETFONT, (WPARAM)dialog.font, 0);
 }
 
 /*--------------------------------------------------------------------
@@ -1109,5 +1124,56 @@ static void set_sended_data(void* data,FILTER* fp)
 
 	lstrcpy(fp->ex_data_ptr,ptr);	// 拡張領域にロゴ名をコピー
 }
+
+
+/*--------------------------------------------------------------------
+*	on_avisynth_button()	AviSynthボタン動作
+*-------------------------------------------------------------------*/
+static BOOL on_avisynth_button(FILTER* fp,void *editp)
+{
+	char str[STRDLG_MAXSTR];
+	int  s,e;
+
+	// スクリプト生成
+	wsprintf(str,"%sLOGO(logofile=\"%s\",\r\n"
+	             "\\           logoname=\"%s\"",
+				(fp->check[0]? "Add":"Erase"),logodata_file,fp->ex_data_ptr);
+
+	if(fp->track[LOGO_X] || fp->track[LOGO_Y])
+		wsprintf(str,"%s,\r\n\\           pos_x=%d, pos_y=%d",
+					str,fp->track[LOGO_X],fp->track[LOGO_Y]);
+
+	if(fp->track[LOGO_YDP]!=128 || fp->track[LOGO_PY] || fp->track[LOGO_CB] || fp->track[LOGO_CR])
+		wsprintf(str,"%s,\r\n\\           depth=%d, yc_y=%d, yc_u=%d, yc_v=%d",
+					str,fp->track[LOGO_YDP],fp->track[LOGO_PY],fp->track[LOGO_CB],fp->track[LOGO_CR]);
+
+
+	if(fp->exfunc->get_frame_n(editp)){	// 画像が読み込まれているとき
+		fp->exfunc->get_select_frame(editp,&s,&e);	// 選択範囲取得
+		wsprintf(str,"%s,\r\n\\           start=%d",str, s+fp->track[LOGO_STRT]);
+
+		if(fp->track[LOGO_FIN] || fp->track[LOGO_FOUT])
+			wsprintf(str,"%s, fadein=%d, fadeout=%d",str,fp->track[LOGO_FIN],fp->track[LOGO_FOUT]);
+
+		wsprintf(str,"%s, end=%d",str,e-fp->track[LOGO_END]);
+	}
+	else{
+		if(fp->track[LOGO_FIN] || fp->track[LOGO_FOUT])
+			wsprintf(str,"%s,\r\n\\           fadein=%d, fadeout=%d",str,fp->track[LOGO_FIN],fp->track[LOGO_FOUT]);
+	}
+
+	wsprintf(str,"%s)\r\n",str);
+
+	
+	EnableWindow(dialog.bt_synth,FALSE);	// synthボタン無効化
+
+	// ダイアログ呼び出し
+	DialogBoxParam(fp->dll_hinst,"STR_DLG",GetWindow(fp->hwnd,GW_OWNER),StrDlgProc,(LPARAM)str);
+
+	EnableWindow(dialog.bt_synth,TRUE);	// synthボタン無効化解除
+
+	return TRUE;
+}
+
 
 //*/
