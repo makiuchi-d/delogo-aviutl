@@ -25,7 +25,14 @@
 //////////////////////////////////////////////////////////////////////
 //	編集ダイアログ
 #define ID_EDIT_NAME    4201
-#define ID_EDIT_NAMETXT 4202
+#define ID_EDIT_START   4202
+#define ID_EDIT_END     4203
+#define ID_EDIT_FIN     4204
+#define ID_EDIT_FOUT    4205
+#define ID_EDIT_SPINST  4206
+#define ID_EDIT_SPINED  4207
+#define ID_EDIT_SPINFI  4208
+#define ID_EDIT_SPINFO  4209
 
 //////////////////////////////////////////////////////////////////////
 //	文字列表示ダイアログ

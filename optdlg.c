@@ -484,7 +484,6 @@ static void ExportLogoData(char *fname,void *data,HWND hdlg)
 	HANDLE hFile;
 	DWORD  dw;
 	DWORD  size;
-	char   c =1;
 	int    s =0;
 	LOGO_FILE_HEADER lfh;
 

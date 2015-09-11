@@ -23,13 +23,13 @@ $(EXE): $(OBJ) $(RES)
 	$(LN) $(LFLAG) $(OBJ)
 	$(RL) -fe$(EXE) $(RES)
 
-filter.obj: filter.c filter.h logo.h optdlg.h
+filter.obj: filter.c filter.h logo.h optdlg.h resource.h send_lgd.h strdlg.h logodef.h
 	$(CC) $(CFLAG) filter.c
 
-optdlg.obj: optdlg.c optdlg.h filter.h logo.h resource.h
+optdlg.obj: optdlg.c optdlg.h filter.h logo.h resource.h editdlg.h
 	$(CC) $(CFLAG) optdlg.c
 
-editdlg.obj: editdlg.c editdlg.h resource.h
+editdlg.obj: editdlg.c editdlg.h resource.h logodef.h logo.h optdlg.h
 	$(CC) $(CFLAG) editdlg.c
 
 strdlg.obj: strdlg.c strdlg.h resource.h

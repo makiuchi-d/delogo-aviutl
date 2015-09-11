@@ -7,6 +7,8 @@
 #include "editdlg.h"
 #include "logo.h"
 #include "optdlg.h"
+#include "logodef.h"
+
 
 extern char filter_name[];	// フィルタ名[filter.c]
 
@@ -54,22 +56,35 @@ BOOL CALLBACK EditDlgProc(HWND hdlg,UINT msg,WPARAM wParam,LPARAM lParam)
 void on_wm_initdialog(HWND hdlg)
 {
 	char title[LOGO_MAX_NAME+10];
+	LOGO_HEADER* lp;
 
-	// ロゴ名取得
-	SendDlgItemMessage(owner,IDC_LIST,LB_GETTEXT,list_n,(LPARAM)title);
+	// ロゴデータ取得
+	lp = (LOGO_HEADER *)SendDlgItemMessage(owner,IDC_LIST,LB_GETITEMDATA,list_n,0);
 
-	// ロゴ名エディットボックス
+	// エディットボックス
 	SendDlgItemMessage(hdlg,ID_EDIT_NAME,EM_SETLIMITTEXT,LOGO_MAX_NAME-1,0);
-	SetDlgItemText(hdlg,ID_EDIT_NAME,title);
+	SendDlgItemMessage(hdlg,ID_EDIT_START, EM_SETLIMITTEXT, 4,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_END,   EM_SETLIMITTEXT, 4,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_FIN,   EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_FOUT,  EM_SETLIMITTEXT, 3,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINST, UDM_SETRANGE, 0, LOGO_STED_MAX);
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINED, UDM_SETRANGE, 0, LOGO_STED_MAX);
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINFI, UDM_SETRANGE, 0, LOGO_FADE_MAX);
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINFO, UDM_SETRANGE, 0, LOGO_FADE_MAX);
+	SetDlgItemText(hdlg,ID_EDIT_NAME,lp->name);
+	SetDlgItemInt(hdlg,ID_EDIT_START,lp->st,FALSE);
+	SetDlgItemInt(hdlg,ID_EDIT_END  ,lp->ed,FALSE);
+	SetDlgItemInt(hdlg,ID_EDIT_FIN  ,lp->fi,FALSE);
+	SetDlgItemInt(hdlg,ID_EDIT_FOUT ,lp->fo,FALSE);
 
 	// キャプション
-	wsprintf(title,"%s - 編集",title);
+	wsprintf(title,"%s - 編集",lp->name);
 	SetWindowText(hdlg,title);
 }
 
 /*--------------------------------------------------------------------
 * 	on_IDOK()	OKボタン動作
-* 		ロゴ名の変更
+* 		ロゴデータの変更
 *-------------------------------------------------------------------*/
 BOOL on_IDOK(HWND hdlg)
 {
@@ -83,7 +98,7 @@ BOOL on_IDOK(HWND hdlg)
 	GetDlgItemText(hdlg,ID_EDIT_NAME,newname,LOGO_MAX_NAME);
 	// リストボックスを検索
 	num = SendDlgItemMessage(owner,IDC_LIST,LB_FINDSTRING,-1,(WPARAM)newname);
-	if(num!=CB_ERR){	// 同名が見つかった
+	if(num!=CB_ERR && num!=list_n){	// 編集中のもの以外に同名が見つかった
 		MessageBox(hdlg,"同名のロゴがあります\n別の名称を設定してください",filter_name,MB_OK|MB_ICONERROR);
 		return FALSE;
 	}
@@ -99,8 +114,12 @@ BOOL on_IDOK(HWND hdlg)
 	// ロゴデータコピー
 	memcpy(newdata,olddata,LOGO_DATASIZE(olddata));
 
-	// ロゴ名設定
+	// ロゴデータ設定
 	lstrcpy(newdata->name,newname);
+	newdata->st = min(GetDlgItemInt(hdlg,ID_EDIT_START,NULL,FALSE),LOGO_STED_MAX);
+	newdata->ed = min(GetDlgItemInt(hdlg,ID_EDIT_END,  NULL,FALSE),LOGO_STED_MAX);
+	newdata->fi = min(GetDlgItemInt(hdlg,ID_EDIT_FIN,  NULL,FALSE),LOGO_FADE_MAX);
+	newdata->fo = min(GetDlgItemInt(hdlg,ID_EDIT_FOUT, NULL,FALSE),LOGO_FADE_MAX);
 
 	// リストボックスを更新
 	DeleteItem(owner,list_n);

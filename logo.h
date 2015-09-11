@@ -56,10 +56,11 @@ typedef struct {
 *		ロゴの基本的な情報を記録
 *-------------------------------------------------------------------*/
 typedef struct {
-	char     name[LOGO_MAX_NAME]; 	/* 名称         */
-	short    x, y;      			/* 基本位置     */
-	short    h, w;      			/* ロゴ高さ・幅 */
-	int      reserve[2];			/* 拡張用に予約 */
+	char     name[LOGO_MAX_NAME]; 	/* 名称                   */
+	short    x, y;      			/* 基本位置               */
+	short    h, w;      			/* ロゴ高さ・幅           */
+	short    fi, fo;    			/* デフォルトのFadeIn/Out */
+	short    st, ed;    			/* デフォルトの開始･終了  */
 } LOGO_HEADER;
 
 /*--------------------------------------------------------------------

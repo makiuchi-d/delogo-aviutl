@@ -60,21 +60,25 @@
 * 	02/18:	AviSynthスクリプトを吐くボタン追加。(0.08)
 * 	04/17:	ロゴデータファイル読み込み時にデータが一つも無い時エラーを出さないようにした。
 * 			開始･終了の最大値を4096まで増やした。(0.08a)
+* 	09/19:	スタックを無駄遣いしていたのを修正。
+* 			開始・フェードイン・アウト・終了の初期値をロゴデータに保存できるようにした。
 * 
 *********************************************************************/
 
 /* ToDo:
 * 	・ロゴデータの作成・編集機能
+* 	・ロゴデータに開始･終了･フェードの情報埋め込み
+* 		コンボボックスで変更された時だけそれらを反映させる（たくや氏よ、プロファイル使えば必要ないでしょうに
 * 
 *  MEMO:
 * 	・ロゴの拡大縮小ルーチン自装しないとだめかなぁ。
 * 		→必要なさげ。当面は自装しない。
 * 	・ロゴ作成・編集は別アプリにしてしまおうか…
-* 		使用公開してるし、誰か作ってくれないかなぁ（他力本願）
+* 		仕様公開してるし、誰か作ってくれないかなぁ（他力本願）
 * 	・ロゴ除去モードとロゴ付加モードを切り替えられるようにしようかな
 * 		→付けてみた
 * 	・解析プラグからデータを受け取るには…独自WndMsg登録してSendMessageで送ってもらう
-* 		→ちゃんと動いた。
+* 		→ちゃんと動いた。…登録しなくてもUSER定義でよかったかも
 * 	・ロゴに１ピクセル未満のズレがある。1/4ピクセルくらいでの位置調整が必要そう。
 * 		→実装完了
 * 	・ダイアログを表示したまま終了するとエラー吐く
@@ -103,6 +107,7 @@
 #include "resource.h"
 #include "send_lgd.h"
 #include "strdlg.h"
+#include "logodef.h"
 
 
 #define ID_BUTTON_OPTION 40001
@@ -112,10 +117,6 @@
 #define Abs(x) ((x>0)? x:-x)
 #define Clamp(n,l,h) ((n<l) ? l : (n>h) ? h : n)
 
-
-#define LOGO_FADE_MAX    256
-#define LOGO_XY_MAX      500
-#define LOGO_XY_MIN     -500
 
 #define LDP_KEY     "logofile"
 #define LDP_DEFAULT "logodata.ldp"
@@ -150,7 +151,7 @@ static void on_wm_filter_init(FILTER* fp);
 static void on_wm_filter_exit(FILTER* fp);
 static void init_dialog(HWND hwnd,HINSTANCE hinst);
 static void update_cb_logo(char *name);
-static void change_param(void);
+static void change_param(FILTER* fp);
 static void set_cb_logo(FILTER* fp);
 static int  set_combo_item(void* data);
 static void del_combo_item(int num);
@@ -169,7 +170,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.08a by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.09 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
@@ -177,7 +178,7 @@ TCHAR *track_name[]   = { 	"位置 X", "位置 Y",
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
 int   track_default[] = {           0,           0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
 int   track_s[]       = { LOGO_XY_MIN, LOGO_XY_MIN,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, 4096, 256, 256, 4096 };	// トラックバーの上限値
+int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N
@@ -322,8 +323,8 @@ BOOL func_exit( FILTER *fp )
 *===================================================================*/
 BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 {
+	static char adjdata[LOGO_MAXSIZE];
 	int num;
-	char adjdata[LOGO_MAXSIZE];
 	int fade;
 	int s,e;
 
@@ -545,7 +546,7 @@ BOOL func_WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, void *
 				case ID_COMBO_LOGO:	// コンボボックス
 					switch(HIWORD(wParam)){
 						case CBN_SELCHANGE:	// 選択変更
-							change_param();
+							change_param(fp);
 							return TRUE;
 					}
 					break;
@@ -903,7 +904,7 @@ static void update_cb_logo(char *name)
 *	change_param()		パラメータの変更
 *		選択されたロゴデータを拡張データ領域にコピー
 *-------------------------------------------------------------------*/
-static void change_param(void)
+static void change_param(FILTER* fp)
 {
 	LRESULT ret;
 
@@ -913,6 +914,18 @@ static void change_param(void)
 
 	if(ret!=CB_ERR)
 		memcpy(ex_data,(void *)ret,LOGO_MAX_NAME);	// ロゴ名をコピー
+
+	// 開始･フェードイン･アウト･終了の初期値があるときはパラメタに反映
+	ret = find_logo((char *)ret);
+	if(ret<0) return;
+
+	if(logodata[ret]->fi || logodata[ret]->fo || logodata[ret]->st || logodata[ret]->ed){
+		fp->track[LOGO_STRT] = logodata[ret]->st;
+		fp->track[LOGO_FIN]  = logodata[ret]->fi;
+		fp->track[LOGO_FOUT] = logodata[ret]->fo;
+		fp->track[LOGO_END]  = logodata[ret]->ed;
+		fp->exfunc->filter_window_update(fp);
+	}
 }
 
 /*--------------------------------------------------------------------
@@ -969,10 +982,9 @@ static void read_logo_pack(char *fname,FILTER *fp)
 	DWORD readed = 0;
 	ULONG ptr;
 	void* data;
-//	unsigned char num;	// ファイルに含まれるデータの数
 	int i;
 	int same;
-	char message[255];
+//	char message[255];
 
 	// ファイルオープン
 	hFile = CreateFile(fname,GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -1098,9 +1110,9 @@ static BOOL on_option_button(FILTER* fp)
 *-------------------------------------------------------------------*/
 static void set_sended_data(void* data,FILTER* fp)
 {
+	static char message[256];
 	void *ptr;
 	UINT same;
-	char message[256];
 	LOGO_HEADER *lgh;
 
 	lgh = (LOGO_HEADER *)data;
@@ -1138,7 +1150,7 @@ static void set_sended_data(void* data,FILTER* fp)
 *-------------------------------------------------------------------*/
 static BOOL on_avisynth_button(FILTER* fp,void *editp)
 {
-	char str[STRDLG_MAXSTR];
+	static char str[STRDLG_MAXSTR];
 	int  s,e;
 
 	// スクリプト生成
