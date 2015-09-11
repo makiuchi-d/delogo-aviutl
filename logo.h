@@ -29,8 +29,13 @@
 * 	31BYTEの文字列
 * 	データ数 1BYTE
 */
-#define LOGO_FILE_HEADER "<logo data file ver0.1>\0\0\0\0\0\0\0\0\0\0\0"
+#define LOGO_FILE_HEADER_STR "<logo data file ver0.1>\0\0\0\0\0\0\0\0\0\0\0"
 #define LOGO_FILE_HEADER_STR_SIZE  31
+
+typedef struct {
+	char          str[LOGO_FILE_HEADER_STR_SIZE];
+	unsigned char logonum;
+} LOGO_FILE_HEADER;
 
 
 /* ロゴデータ最大サイズ：

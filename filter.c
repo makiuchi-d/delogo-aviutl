@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.08
+* 								ver 0.08a
 * 
 * 2003
 * 	02/01:	製作開始
@@ -58,6 +58,8 @@
 * 	10/25:	位置調整で-200以下にすると落ちるバグ修正。(0.07b)
 * 2004
 * 	02/18:	AviSynthスクリプトを吐くボタン追加。(0.08)
+* 	04/17:	ロゴデータファイル読み込み時にデータが一つも無い時エラーを出さないようにした。
+* 			開始･終了の最大値を4096まで増やした。(0.08a)
 * 
 *********************************************************************/
 
@@ -167,7 +169,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.08 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.08a by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
@@ -175,7 +177,7 @@ TCHAR *track_name[]   = { 	"位置 X", "位置 Y",
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
 int   track_default[] = {           0,           0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
 int   track_s[]       = { LOGO_XY_MIN, LOGO_XY_MIN,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
+int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, 4096, 256, 256, 4096 };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N
@@ -590,6 +592,7 @@ static void on_wm_filter_exit(FILTER* fp)
 	DWORD  dw;
 	HANDLE hFile;
 	void*  data;
+	LOGO_FILE_HEADER lfh;
 
 	if(lstrlen(logodata_file)==0){	// ロゴデータファイル名がないとき
 		if(!fp->exfunc->dlg_get_load_name(logodata_file,LDP_FILTER,LDP_DEFAULT)){
@@ -623,8 +626,10 @@ static void on_wm_filter_exit(FILTER* fp)
 	SetFilePointer(hFile,0, 0, FILE_BEGIN);	// 先頭へ
 
 	// ヘッダ書き込み
+	ZeroMemory(&lfh,sizeof(lfh));
+	strcpy(lfh.str,LOGO_FILE_HEADER_STR);
 	dw = 0;
-	WriteFile(hFile,LOGO_FILE_HEADER,32,&dw,NULL);
+	WriteFile(hFile,&lfh,sizeof(LOGO_FILE_HEADER),&dw,NULL);
 	if(dw!=32){	// 書き込み失敗
 		MessageBox(fp->hwnd,"ロゴデータ保存に失敗しました(1)",filter_name,MB_OK|MB_ICONERROR);
 	}
@@ -642,10 +647,11 @@ static void on_wm_filter_exit(FILTER* fp)
 			n++;
 		}
 
-		SetFilePointer(hFile,31, 0, FILE_BEGIN);	// 先頭から31byteへ
+		lfh.logonum = n;
+		SetFilePointer(hFile,0, 0, FILE_BEGIN);	// 先頭へ
 		dw = 0;
-		WriteFile(hFile,&n,1,&dw,NULL);
-		if(dw!=1)
+		WriteFile(hFile,&lfh,sizeof(lfh),&dw,NULL);
+		if(dw!=sizeof(lfh))
 			MessageBox(fp->hwnd,"ロゴデータ保存に失敗しました(3)",filter_name,MB_OK|MB_ICONERROR);
 	}
 
@@ -958,11 +964,12 @@ static void del_combo_item(int num)
 static void read_logo_pack(char *fname,FILTER *fp)
 {
 	HANDLE hFile;
+	LOGO_FILE_HEADER lfh;
 	LOGO_HEADER lgh;
 	DWORD readed = 0;
 	ULONG ptr;
 	void* data;
-	unsigned char num;	// ファイルに含まれるデータの数
+//	unsigned char num;	// ファイルに含まれるデータの数
 	int i;
 	int same;
 	char message[255];
@@ -974,19 +981,19 @@ static void read_logo_pack(char *fname,FILTER *fp)
 		MessageBox(fp->hwnd,"ロゴデータファイルが見つかりません",filter_name,MB_OK|MB_ICONERROR);
 		return;
 	}
-	if(GetFileSize(hFile, NULL)<sizeof(LOGO_HEADER)){	// サイズ確認
+	if(GetFileSize(hFile, NULL)<sizeof(LOGO_FILE_HEADER)){	// サイズ確認
 		CloseHandle(hFile);
 		MessageBox(fp->hwnd,"ロゴデータファイルが不正です",filter_name,MB_OK|MB_ICONERROR);
 		return;
 	}
 
-	SetFilePointer(hFile,31, 0, FILE_BEGIN);	// 先頭から31byteへ
-	ReadFile(hFile,&num,1,&readed,NULL);	// データ数取得
+//	SetFilePointer(hFile,31, 0, FILE_BEGIN);	// 先頭から31byteへ
+	ReadFile(hFile,&lfh,sizeof(LOGO_FILE_HEADER),&readed,NULL);	// ファイルヘッダ取得
 
 	logodata_n = 0;	// 書き込みデータカウンタ
 	logodata = NULL;
 
-	for(i=0;i<num;i++){
+	for(i=0;i<lfh.logonum;i++){
 
 		// LOGO_HEADER 読み込み
 		readed = 0;

@@ -61,8 +61,16 @@ static BOOL CopyTextToClipboard(HWND hwnd,const char* text)
 	lstrcpy(ptrCopy,text);
 	GlobalUnlock(hglbCopy);
 
-	EmptyClipboard();
-	SetClipboardData(CF_TEXT,hglbCopy);
+	if(!EmptyClipboard()){
+		GlobalFree(hglbCopy);
+		CloseClipboard();
+		return FALSE;
+	}
+	if(SetClipboardData(CF_TEXT,hglbCopy)==NULL){
+		GlobalFree(hglbCopy);
+		CloseClipboard();
+		return FALSE;
+	}
 	CloseClipboard();
 
 	return TRUE;
