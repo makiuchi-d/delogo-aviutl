@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.07
+* 								ver 0.07b
 * 
 * 2003
 * 	02/01:	製作開始
@@ -55,6 +55,7 @@
 * 	09/27:	filter.hをAviUtl0.99SDKのものに差し替え。(0.07)
 * 	10/20:	SSE2使用のrgb2ycがバグもちなので、自前でRGB->YCbCrするようにした。
 * 			位置X/Yの最大･最小値を拡張した。(0.07a)
+* 	10/25:	位置調整で-200以下にすると落ちるバグ修正。(0.07b)
 * 
 *********************************************************************/
 
@@ -107,6 +108,8 @@
 
 
 #define LOGO_FADE_MAX    256
+#define LOGO_XY_MAX      500
+#define LOGO_XY_MIN     -500
 
 #define LDP_KEY     "logofile"
 #define LDP_DEFAULT "logodata.ldp"
@@ -158,15 +161,15 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.07a by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.07b by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
 							"深度", "Y", "Cb", "Cr", 
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
-int   track_default[] = {    0,    0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
-int   track_s[]       = { -500, -500,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = {  500,  500, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
+int   track_default[] = {           0,           0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
+int   track_s[]       = { LOGO_XY_MIN, LOGO_XY_MIN,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
+int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, 256, 256, 256, 256 };	// トラックバーの上限値
 #endif
 #define check_N 2
 #if check_N
@@ -684,8 +687,8 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	memcpy(adjdata->name,data->name,LOGO_MAX_NAME);
 
 	// 左上座標設定（位置調整後）
-	adjdata->x = data->x +(int)(fp->track[LOGO_X]+200)/4 -50;
-	adjdata->y = data->y +(int)(fp->track[LOGO_Y]+200)/4 -50;
+	adjdata->x = data->x +(int)(fp->track[LOGO_X]-LOGO_XY_MIN)/4 + LOGO_XY_MIN/4;
+	adjdata->y = data->y +(int)(fp->track[LOGO_Y]-LOGO_XY_MIN)/4 + LOGO_XY_MIN/4;
 
 	adjdata->w = w = data->w + 1;	// 1/4単位調整するため
 	adjdata->h = h = data->h + 1;	// 幅、高さを１増やす
@@ -694,8 +697,8 @@ static BOOL create_adj_exdata(FILTER *fp,LOGO_HEADER *adjdata,const LOGO_HEADER 
 	(void *)df = (void *)(data +1);
 	(void *)ex = (void *)(adjdata +1);
 
-	adjx = (fp->track[LOGO_X]+200) % 4;	// 位置端数
-	adjy = (fp->track[LOGO_Y]+200) % 4;
+	adjx = (fp->track[LOGO_X]-LOGO_XY_MIN) % 4;	// 位置端数
+	adjy = (fp->track[LOGO_Y]-LOGO_XY_MIN) % 4;
 
 	//----------------------------------------------------- 一番上の列
 	ex[0].dp_y  = df[0].dp_y *(4-adjx)*(4-adjy)/16;	// 左端

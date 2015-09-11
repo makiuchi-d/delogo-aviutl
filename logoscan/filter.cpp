@@ -1,5 +1,5 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver 0.06
+* 	ロゴ解析プラグイン		ver 0.06b
 * 
 * 2003
 * 	04/06:	とりあえず完成。
@@ -42,6 +42,8 @@
 * 			exfunc->rgb2ycをやめて、自前でRGB->YCbCr
 * 			有効フレームリストを保存のチェックが入っていない時動かないバグ修正
 * 			ログファイルのデフォルト名をソースファイル名からつくるようにした。(0.06a)
+* 	10/23:	有効フレームリスト保存ダイアログでキャンセルすると落ちるバグ修正。
+* 			妙な記述があったのを修正。（何で動いてたんだろ…
 * 
 *********************************************************************/
 /*	TODO:
@@ -97,7 +99,7 @@ void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*,char*);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver 0.06a by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.06b by MakKi";
 
 #define track_N 5
 #if track_N
@@ -453,13 +455,13 @@ void ScanLogoData(FILTER* fp,void* editp)
 
 		if(fp->check[cLIST]){	// リスト保存時ファイル名取得
 			// ロゴ名の初期値
-			GetWindowText(GetWindow(fp->hwnd,GW_OWNER),list,MAX_PATH);	// タイトルバー文字列取得
-			for(int i=1;list[i];i++)
+			GetWindowText(GetWindow(fp->hwnd,GW_OWNER),list,MAX_PATH-10);	// タイトルバー文字列取得
+			for(int i=1;list[i]&&i<MAX_PATH-10;i++)
 				if(list[i]=='.') list[i] = '\0';	// 2文字目以降の'.'を終端にする（拡張子を削除）
 			wsprintf(list,"%s_scan.txt",list);	// デフォルトロゴ名作成
 
 			if(!fp->exfunc->dlg_get_save_name(list,LIST_FILTER,list))
-				*list = '\0';	// キャンセル時
+				list[0] = '\0';	// キャンセル時
 		}
 
 		// ScanPixelを設定する+解析・ロゴデータ作成
@@ -532,6 +534,7 @@ void SetScanPixel(FILTER* fp,ScanPixel*& sp,int w,int h,int s,int e,void* editp,
 	param.data   = &logodata;
 	param.errstr = NULL;
 	param.mark   = fp->check[cMARK];
+	param.list   = NULL;
 
 	if(*list){
 		param.list = fopen(list,"w");
