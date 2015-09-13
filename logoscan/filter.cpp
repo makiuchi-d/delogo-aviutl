@@ -1,5 +1,5 @@
 /*********************************************************************
-* 	ロゴ解析プラグイン		ver 0.06b
+* 	ロゴ解析プラグイン		ver 0.07
 * 
 * 2003
 * 	04/06:	とりあえず完成。
@@ -44,10 +44,15 @@
 * 			ログファイルのデフォルト名をソースファイル名からつくるようにした。(0.06a)
 * 	10/23:	有効フレームリスト保存ダイアログでキャンセルすると落ちるバグ修正。
 * 			妙な記述があったのを修正。（何で動いてたんだろ…
+* 2008
+* 	01/07:	ロゴサイズ制限撤廃
+* 			ロゴファイルのデータ数拡張に伴う修正
 * 
 *********************************************************************/
 /*	TODO:
 * 	・拡大ツール機能（気まぐれバロンさんのアイディア)
+* 	・セーブ中は何もしないようにする
+* 	・結果ダイアログで開始･終了･フェードを書き込めるようにする
 * 
 * 	MEMO:
 * 	・背景値計算改善策①：メディアン化してから平均とか
@@ -99,7 +104,7 @@ void SetScanPixel(FILTER*,ScanPixel*&,int,int,int,int,void*,char*);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = "ロゴ解析";
-char filter_info[] = "ロゴ解析プラグイン ver 0.06b by MakKi";
+char filter_info[] = "ロゴ解析プラグイン ver 0.07 by MakKi";
 
 #define track_N 5
 #if track_N
@@ -436,9 +441,9 @@ void ScanLogoData(FILTER* fp,void* editp)
 		fp->exfunc->get_select_frame(editp,&start,&end);
 		if(end-start<1) throw "画像の枚数が足りません";
 
-		if((fp->track[tLOGOW]+1)*(fp->track[tLOGOH]+1) > LOGO_MAXPIXEL)
-			// h*wがロゴデータ上限より大きい時
-			throw "ロゴ領域が広すぎます";
+//		if((fp->track[tLOGOW]+1)*(fp->track[tLOGOH]+1) > LOGO_MAXPIXEL)
+//			// h*wがロゴデータ上限より大きい時
+//			throw "ロゴ領域が広すぎます";
 
 		// 画像サイズ
 		if(!fp->exfunc->get_frame_size(editp,&w,&h))

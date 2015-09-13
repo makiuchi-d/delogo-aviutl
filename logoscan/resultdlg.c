@@ -257,8 +257,8 @@ static void ExportLogoData(char *fname,void *data,HWND hdlg)
 	HANDLE hFile;
 	DWORD  dw;
 	DWORD  size;
-	char   c =1;
 	int    s =0;
+	LOGO_FILE_HEADER lfh;
 
 	// ファイルを開く
 	hFile = CreateFile(fname,GENERIC_WRITE,0,0,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -267,30 +267,25 @@ static void ExportLogoData(char *fname,void *data,HWND hdlg)
 	}
 	SetFilePointer(hFile,0, 0, FILE_BEGIN);	// 先頭へ
 
+	ZeroMemory(&lfh,sizeof(LOGO_FILE_HEADER));
+	strcpy(lfh.str,LOGO_FILE_HEADER_STR);
+	lfh.logonum.l = SWAP_ENDIAN(1);
+
 	// ヘッダ書き込み
 	dw = 0;
-	WriteFile(hFile,LOGO_FILE_HEADER,31,&dw,NULL);
-	if(dw!=31){	// 書き込み失敗
+	WriteFile(hFile,&lfh,sizeof(LOGO_FILE_HEADER),&dw,NULL);
+	if(dw!=sizeof(LOGO_FILE_HEADER)){	// 書き込み失敗
 		MessageBox(hdlg,"ロゴデータ保存に失敗しました(1)",filter_name,MB_OK|MB_ICONERROR);
 		s=1;
 	}
 	else{	// 成功
-		// データ数書き込み（必ず１）
+		// データ書き込み
+		size = LOGO_DATASIZE(data);	// データサイズ取得
 		dw = 0;
-		WriteFile(hFile,&c,1,&dw,NULL);
-		if(dw!=1){	// 書き込み失敗
+		WriteFile(hFile,data,size,&dw,NULL);
+		if(dw!=size){
 			MessageBox(hdlg,"ロゴデータ保存に失敗しました(2)",filter_name,MB_OK|MB_ICONERROR);
 			s=1;
-		}
-		else{	// 成功
-			// データ書き込み
-			size = LOGO_DATASIZE(data);	// データサイズ取得
-			dw = 0;
-			WriteFile(hFile,data,size,&dw,NULL);
-			if(dw!=size){
-				MessageBox(hdlg,"ロゴデータ保存に失敗しました(3)",filter_name,MB_OK|MB_ICONERROR);
-				s=1;
-			}
 		}
 	}
 

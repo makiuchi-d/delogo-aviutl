@@ -383,6 +383,7 @@ static void on_IDC_DOWN(HWND hdlg)
 static int ReadLogoData(char *fname,HWND hdlg)
 {
 	HANDLE hFile;
+	LOGO_FILE_HEADER lfh;
 	LOGO_HEADER lgh;
 	DWORD readed = 0;
 	ULONG ptr;
@@ -406,10 +407,17 @@ static int ReadLogoData(char *fname,HWND hdlg)
 		return 0;
 	}
 
-	SetFilePointer(hFile,31, 0, FILE_BEGIN);	// 先頭から31byteへ
-	ReadFile(hFile,&num,1,&readed,NULL);	// データ数取得
+//	SetFilePointer(hFile,31, 0, FILE_BEGIN);	// 先頭から31byteへ
+//	ReadFile(hFile,&num,1,&readed,NULL);	// データ数取得
+	ReadFile(hFile,&lfh,sizeof(LOGO_FILE_HEADER),&readed,NULL);
+	if(readed!=sizeof(LOGO_FILE_HEADER)){
+		CloseHandle(hFile);
+		MessageBox(hdlg,"ロゴデータファイルの読み込みに失敗しました",filter_name,MB_OK|MB_ICONERROR);
+		return 0;
+	}
 
 	n = 0;	// 読み込みデータカウンタ
+	num = SWAP_ENDIAN(lfh.logonum.l);
 
 	for(i=0;i<num;i++){
 
@@ -497,7 +505,7 @@ static void ExportLogoData(char *fname,void *data,HWND hdlg)
 	// ヘッダ書き込み
 	ZeroMemory(&lfh,sizeof(lfh));
 	strcpy(lfh.str,LOGO_FILE_HEADER_STR);
-	lfh.logonum = 1;	// データ数は必ず１
+	lfh.logonum.l = SWAP_ENDIAN(1);	// データ数は必ず１
 
 	dw = 0;
 	WriteFile(hFile,&lfh,sizeof(lfh),&dw,NULL);

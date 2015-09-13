@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.10
+* 								ver 0.11
 * 
 * 2003
 * 	02/01:	製作開始
@@ -66,6 +66,10 @@
 * 	04/18:	フィルタ名、パラメタ名を変更できるようにした。(0.09a)
 * 2007
 * 	11/07:	プロファイルの境界をフェードの基点にできるようにした。(0.10)
+* 2008
+*	01/07:	ロゴのサイズ制限を撤廃
+*			開始・終了パラメタの範囲変更(負の値も許可)
+*			ロゴファイルのデータ数を拡張(1byte -> 4byte)
 * 
 *********************************************************************/
 
@@ -141,6 +145,9 @@ char  logodata_file[MAX_PATH] = { 0 };	// ロゴデータファイル名(INIに保存)
 LOGO_HEADER** logodata   = NULL;
 unsigned int  logodata_n = 0;
 
+void *adjdata = NULL;	// 位置調節後ロゴデータ用バッファ
+unsigned int adjdata_size = 0;
+
 char ex_data[LOGO_MAX_NAME];	// 拡張データ領域
 
 static UINT  WM_SEND_LOGO_DATA =0;	// ロゴ受信メッセージ
@@ -173,15 +180,21 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.10 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.11 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
 							"深度", "Y", "Cb", "Cr", 
 							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
-int   track_default[] = {           0,           0, 128,    0,    0,    0, 0, 0, 0, 0 };	// トラックバーの初期値
-int   track_s[]       = { LOGO_XY_MIN, LOGO_XY_MIN,   0, -100, -100, -100, 0, 0, 0, 0 };	// トラックバーの下限値
-int   track_e[]       = { LOGO_XY_MAX, LOGO_XY_MAX, 256,  100,  100,  100, LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
+int   track_default[] = { 0, 0,
+						  128, 0, 0, 0,
+						  0, 0, 0, 0, 0 };	// トラックバーの初期値
+int   track_s[] = { LOGO_XY_MIN, LOGO_XY_MIN,
+					0, -100, -100, -100,
+					LOGO_STED_MIN, 0, 0, LOGO_STED_MIN };	// トラックバーの下限値
+int   track_e[] = { LOGO_XY_MAX, LOGO_XY_MAX,
+					256, 100, 100, 100,
+					LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
 #endif
 #define check_N 3
 #if check_N
@@ -321,6 +334,10 @@ BOOL func_exit( FILTER *fp )
 		logodata = NULL;
 	}
 
+	free(adjdata);
+	adjdata = NULL;
+	adjdata_size = 0;
+
 	return TRUE;
 }
 
@@ -329,13 +346,24 @@ BOOL func_exit( FILTER *fp )
 *===================================================================*/
 BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 {
-	static char adjdata[LOGO_MAXSIZE];
+	unsigned int size;
 	int num;
 	int fade;
 
 	// ロゴ検索
 	num = find_logo(fp->ex_data_ptr);
 	if(num<0) return FALSE;
+
+	size = sizeof(LOGO_HEADER)
+		+ (logodata[num]->h+1) * (logodata[num]->w+1) * sizeof(LOGO_PIXEL);
+	if(size > adjdata_size){
+		adjdata = realloc(adjdata,size);
+		adjdata_size = size;
+	}
+	if(adjdata==NULL){	//確保失敗
+		adjdata_size = 0;
+		return FALSE;
+	}
 
 	fade = calc_fade(fp,fpip);
 
@@ -344,9 +372,9 @@ BOOL func_proc(FILTER *fp,FILTER_PROC_INFO *fpip)
 		if(!create_adj_exdata(fp,(void *)adjdata,logodata[num]))
 			return FALSE;
 	}
-	else {
+	else{
 		// 4の倍数のときはx,yのみ書き換え
-		memcpy(adjdata,logodata[num],LOGO_DATASIZE(logodata[num]));
+		memcpy(adjdata,logodata[num],size);
 		((LOGO_HEADER *)adjdata)->x += fp->track[LOGO_X] / 4;
 		((LOGO_HEADER *)adjdata)->y += fp->track[LOGO_Y] / 4;
 	}
@@ -708,7 +736,7 @@ static void on_wm_filter_exit(FILTER* fp)
 			n++;
 		}
 
-		lfh.logonum = n;
+		lfh.logonum.l = SWAP_ENDIAN(n);
 		SetFilePointer(hFile,0, 0, FILE_BEGIN);	// 先頭へ
 		dw = 0;
 		WriteFile(hFile,&lfh,sizeof(lfh),&dw,NULL);
@@ -1044,7 +1072,7 @@ static void read_logo_pack(char *fname,FILTER *fp)
 	void* data;
 	int i;
 	int same;
-//	char message[255];
+	int logonum;
 
 	// ファイルオープン
 	hFile = CreateFile(fname,GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -1064,8 +1092,9 @@ static void read_logo_pack(char *fname,FILTER *fp)
 
 	logodata_n = 0;	// 書き込みデータカウンタ
 	logodata = NULL;
+	logonum = SWAP_ENDIAN(lfh.logonum.l);
 
-	for(i=0;i<lfh.logonum;i++){
+	for(i=0;i<logonum;i++){
 
 		// LOGO_HEADER 読み込み
 		readed = 0;

@@ -77,8 +77,8 @@ FONT     9, "ÇlÇr ÇoÉSÉVÉbÉN"
 //  VERSION INFO
 //
 VS_VIRSION_INFO VERSIONINFO
- FILEVERSION    0,0,6,2
- PRODUCTVERSION 0,0,6
+ FILEVERSION    0,0,7,0
+ PRODUCTVERSION 0,0,7
  FILEFLAGSMASK  0x3FL
  FILEFLAGS      0x0L
  FILEOS         VOS__WINDOWS32
@@ -89,14 +89,13 @@ VS_VIRSION_INFO VERSIONINFO
 	{
         BLOCK "041103A4"
 		{
-//			VALUE "Comments",         "beta version\0"
             VALUE "FileDescription",  "ÉçÉSâêÕ Plugin for AviUtl 0.98d\0"
-            VALUE "FileVersion",      "0.06b\0"
+            VALUE "FileVersion",      "0.07\0"
             VALUE "InternalName",     "LogoScan\0"
             VALUE "LegalCopyright",   "(C) MakKi\0"
             VALUE "OriginalFilename", "logoscan.aup\0"
             VALUE "ProductName",      "ÉçÉSâêÕ ÉvÉâÉOÉCÉì\0"
-            VALUE "ProductVersion",   "0.06b\0"
+            VALUE "ProductVersion",   "0.07\0"
 		}
 	}
     BLOCK "VarFileInfo"
