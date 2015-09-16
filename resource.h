@@ -33,6 +33,10 @@
 #define ID_EDIT_SPINED  4207
 #define ID_EDIT_SPINFI  4208
 #define ID_EDIT_SPINFO  4209
+#define ID_EDIT_X       4210
+#define ID_EDIT_Y       4211
+#define ID_EDIT_SPINX   4212
+#define ID_EDIT_SPINY   4213
 
 //////////////////////////////////////////////////////////////////////
 //	文字列表示ダイアログ

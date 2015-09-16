@@ -71,11 +71,18 @@ void on_wm_initdialog(HWND hdlg)
 	SendDlgItemMessage(hdlg,ID_EDIT_SPINED, UDM_SETRANGE, 0, LOGO_STED_MAX);
 	SendDlgItemMessage(hdlg,ID_EDIT_SPINFI, UDM_SETRANGE, 0, LOGO_FADE_MAX);
 	SendDlgItemMessage(hdlg,ID_EDIT_SPINFO, UDM_SETRANGE, 0, LOGO_FADE_MAX);
+	SendDlgItemMessage(hdlg,ID_EDIT_X, EM_SETLIMITTEXT, 5,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_Y, EM_SETLIMITTEXT, 5,0);
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINX, UDM_SETRANGE, 0, 0x7fff);	// signed 16bitの上限
+	SendDlgItemMessage(hdlg,ID_EDIT_SPINY, UDM_SETRANGE, 0, 0x7fff);
+
 	SetDlgItemText(hdlg,ID_EDIT_NAME,lp->name);
 	SetDlgItemInt(hdlg,ID_EDIT_START,lp->st,FALSE);
 	SetDlgItemInt(hdlg,ID_EDIT_END  ,lp->ed,FALSE);
 	SetDlgItemInt(hdlg,ID_EDIT_FIN  ,lp->fi,FALSE);
 	SetDlgItemInt(hdlg,ID_EDIT_FOUT ,lp->fo,FALSE);
+	SetDlgItemInt(hdlg,ID_EDIT_X,lp->x,FALSE);
+	SetDlgItemInt(hdlg,ID_EDIT_Y,lp->y,FALSE);
 
 	// キャプション
 	wsprintf(title,"%s - 編集",lp->name);
@@ -108,7 +115,7 @@ BOOL on_IDOK(HWND hdlg)
 	// メモリ確保
 	newdata = (LOGO_HEADER *)malloc(LOGO_DATASIZE(olddata));
 	if(newdata==NULL){
-		MessageBox(hdlg,"メモリが確保できませんでした",filter_name,MB_OK|MB_ICONERROR);
+		MessageBox(hdlg,"メモリを確保できませんでした",filter_name,MB_OK|MB_ICONERROR);
 		return TRUE;
 	}
 	// ロゴデータコピー
@@ -120,6 +127,8 @@ BOOL on_IDOK(HWND hdlg)
 	newdata->ed = min(GetDlgItemInt(hdlg,ID_EDIT_END,  NULL,FALSE),LOGO_STED_MAX);
 	newdata->fi = min(GetDlgItemInt(hdlg,ID_EDIT_FIN,  NULL,FALSE),LOGO_FADE_MAX);
 	newdata->fo = min(GetDlgItemInt(hdlg,ID_EDIT_FOUT, NULL,FALSE),LOGO_FADE_MAX);
+	newdata->x  = GetDlgItemInt(hdlg,ID_EDIT_X,NULL,FALSE);
+	newdata->y  = GetDlgItemInt(hdlg,ID_EDIT_Y,NULL,FALSE);
 
 	// リストボックスを更新
 	DeleteItem(owner,list_n);

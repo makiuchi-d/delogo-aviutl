@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.11
+* 								ver 0.12
 * 
 * 2003
 * 	02/01:	製作開始
@@ -69,7 +69,8 @@
 * 2008
 *	01/07:	ロゴのサイズ制限を撤廃
 *			開始・終了パラメタの範囲変更(負の値も許可)
-*			ロゴファイルのデータ数を拡張(1byte -> 4byte)
+*			ロゴファイルのデータ数を拡張(1byte -> 4byte) (0.11)
+*	06/21:	編集ダイアログで位置(X,Y)も編集できるようにした。(0.12)
 * 
 *********************************************************************/
 
@@ -180,7 +181,7 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.11 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.12 by MakKi";
 #define track_N 10
 #if track_N
 TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
