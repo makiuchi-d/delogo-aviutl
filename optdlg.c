@@ -311,6 +311,9 @@ static void on_IDC_EDIT(HWND hdlg)
 		DialogBoxParam(optfp->dll_hinst,"EDIT_DLG",hdlg,EditDlgProc,(LPARAM)n);
 	else
 		MessageBox(hdlg,"ロゴが選択されていません",filter_name,MB_OK|MB_ICONERROR);
+
+	// アイテムを選択しなおす
+	SendDlgItemMessage(hdlg,IDC_LIST,LB_SETCURSEL,n,0);
 }
 
 /*--------------------------------------------------------------------
@@ -780,9 +783,13 @@ static void set_bgyc(HWND hdlg)
 *-------------------------------------------------------------------*/
 static void RGBtoYCbCr(PIXEL_YC *ycp,const PIXEL *rgb)
 {
-	ycp->y  =  0.2989*4096/256*rgb->r + 0.5866*4096/256*rgb->g + 0.1145*4096/256*rgb->b +0.5;
-	ycp->cb = -0.1687*4096/256*rgb->r - 0.3312*4096/256*rgb->g + 0.5000*4096/256*rgb->b +0.5;
-	ycp->cr =  0.5000*4096/256*rgb->r - 0.4183*4096/256*rgb->g - 0.0816*4096/256*rgb->b +0.5;
+	// ycp->y  =  0.2989*4096/256*rgb->r + 0.5866*4096/256*rgb->g + 0.1145*4096/256*rgb->b +0.5;
+	// ycp->cb = -0.1687*4096/256*rgb->r - 0.3312*4096/256*rgb->g + 0.5000*4096/256*rgb->b +0.5;
+	// ycp->cr =  0.5000*4096/256*rgb->r - 0.4183*4096/256*rgb->g - 0.0816*4096/256*rgb->b +0.5;
+
+	ycp->y  = (( 4918*rgb->r+354)>>10)+(( 9655*rgb->g+585)>>10)+(( 1875*rgb->b+523)>>10);
+	ycp->cb = ((-2775*rgb->r+240)>>10)+((-5449*rgb->g+515)>>10)+(( 8224*rgb->b+256)>>10);
+	ycp->cr = (( 8224*rgb->r+256)>>10)+((-6887*rgb->g+110)>>10)+((-1337*rgb->b+646)>>10);
 }
 
 //*/

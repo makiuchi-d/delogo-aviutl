@@ -37,3 +37,8 @@ strdlg.obj: strdlg.c strdlg.h resource.h
 
 $(RES): delogo.rc resource.h
 	$(RC) $(RFLAG) delogo.rc
+
+clean:
+	del *.obj
+	del *.tds
+	del *.res

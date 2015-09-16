@@ -1,6 +1,6 @@
 /*********************************************************************
 * 	透過性ロゴ（BSマークとか）除去フィルタ
-* 								ver 0.12
+* 								ver 0.13
 * 
 * 2003
 * 	02/01:	製作開始
@@ -71,11 +71,17 @@
 *			開始・終了パラメタの範囲変更(負の値も許可)
 *			ロゴファイルのデータ数を拡張(1byte -> 4byte) (0.11)
 *	06/21:	編集ダイアログで位置(X,Y)も編集できるようにした。(0.12)
+*	07/03:	スピンコントロールで桁区切りのカンマが付かないようにした
+*			ロゴ編集後、リストのロゴを選択状態にしなおすように
+*			RGBtoYCの計算式を整数演算に (0.12a)
+*	09/29:	スライダの最大最小値を変更できるようにした。(0.13)
 * 
 *********************************************************************/
 
 /* ToDo:
 * 	・ロゴデータの作成・編集機能
+* 	・複数導入した時、ロゴリストを共有するように
+* 	・フィルタの名称が変わっていてもロゴ解析から送信できるように
 * 
 *  MEMO:
 * 	・ロゴの拡大縮小ルーチン自装しないとだめかなぁ。
@@ -103,7 +109,12 @@
 * 	WM_FILTER_INITではコンボボックスアイテムからファイルに保存。（今までどおり）
 * 	オプション設定ダイアログでのロゴデータの読み込み・削除は今までどおり。
 * 	OKボタンが押されたときは、リストアイテムからlogodata配列を作り直す。コンボアイテムの更新は今までどおり。
-* 
+*
+*  複数導入でのロゴデータ共有の方法のアイディア (2009/01/24)
+* 	初期化時にfpを走査、func_proc() に適当なメッセージを送る。(ロゴフィルタかどうか&バージョンチェック)
+* 	データ共有は最初のフィルタがロゴデータを保持、他のフィルタは 最初のにfunc_proc()にメッセージをなげて取得。
+* 	ロゴリスト編集ボタンどうしよう。最初のフィルタを呼び出すのがよいか。
+* 	ロゴ解析も同じ方法でロゴフィルタを特定できる。
 */
 #include <windows.h>
 #include <commctrl.h>
@@ -181,21 +192,21 @@ BOOL func_proc_add_logo(FILTER *fp,FILTER_PROC_INFO *fpip,LOGO_HEADER *lgh,int);
 //	FILTER_DLL構造体
 //----------------------------
 char filter_name[] = LOGO_FILTER_NAME;
-char filter_info[] = LOGO_FILTER_NAME" ver 0.12 by MakKi";
+char filter_info[] = LOGO_FILTER_NAME" ver 0.13 by MakKi";
 #define track_N 10
 #if track_N
-TCHAR *track_name[]   = { 	"位置 X", "位置 Y", 
-							"深度", "Y", "Cb", "Cr", 
-							"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
-int   track_default[] = { 0, 0,
-						  128, 0, 0, 0,
-						  0, 0, 0, 0, 0 };	// トラックバーの初期値
-int   track_s[] = { LOGO_XY_MIN, LOGO_XY_MIN,
-					0, -100, -100, -100,
-					LOGO_STED_MIN, 0, 0, LOGO_STED_MIN };	// トラックバーの下限値
-int   track_e[] = { LOGO_XY_MAX, LOGO_XY_MAX,
-					256, 100, 100, 100,
-					LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
+TCHAR *track_name[track_N] = { 	"位置 X", "位置 Y", 
+								"深度", "Y", "Cb", "Cr", 
+								"開始", "FadeIn", "FadeOut", "終了" };	// トラックバーの名前
+int   track_default[track_N] = { 0, 0,
+								 128, 0, 0, 0,
+								 0, 0, 0, 0 };	// トラックバーの初期値
+int   track_s[track_N] = { LOGO_XY_MIN, LOGO_XY_MIN,
+						   0, -100, -100, -100,
+						   LOGO_STED_MIN, 0, 0, LOGO_STED_MIN };	// トラックバーの下限値
+int   track_e[track_N] = { LOGO_XY_MAX, LOGO_XY_MAX,
+						   256, 100, 100, 100,
+						   LOGO_STED_MAX, LOGO_FADE_MAX, LOGO_FADE_MAX, LOGO_STED_MAX };	// トラックバーの上限値
 #endif
 #define check_N 3
 #if check_N
@@ -1322,6 +1333,21 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
         wsprintf(key,"track%d",i);
         GetPrivateProfileString("string",key,filter.track_name[i],strings[i+1],FILTER_TRACK_MAX,ini_name);
         filter.track_name[i] = strings[i+1];
+      }
+      // トラック デフォルト値
+      for(i=0;i<TRACK_N;i++){
+        wsprintf(key,"track%d_def",i);
+        filter.track_default[i] = GetPrivateProfileInt("int",key,filter.track_default[i],ini_name);
+      }
+      // トラック 最小値
+      for(i=0;i<TRACK_N;i++){
+        wsprintf(key,"track%d_min",i);
+        filter.track_s[i] = GetPrivateProfileInt("int",key,filter.track_s[i],ini_name);
+      }
+      // トラック 最大値
+      for(i=0;i<TRACK_N;i++){
+        wsprintf(key,"track%d_max",i);
+        filter.track_e[i] = GetPrivateProfileInt("int",key,filter.track_e[i],ini_name);
       }
 
       // チェック名
